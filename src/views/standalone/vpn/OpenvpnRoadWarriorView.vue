@@ -49,6 +49,7 @@ export type RWServer = {
   server: string
   ns_public_ip: string[]
   ns_redirect_gateway: string
+  ns_inter_server?: string
   ns_local: string[]
   ns_dhcp_options: { option: string; value: string }[]
   ns_pool_start?: string

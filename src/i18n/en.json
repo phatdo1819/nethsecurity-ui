@@ -1966,6 +1966,8 @@
       "range_ip_end": "Range IP end",
       "add_network": "Add network",
       "allow_client_to_client_network_traffic": "Allow client-to-client network traffic",
+      "allow_inter_server_traffic": "Allow traffic with other Road Warrior servers",
+      "allow_inter_server_traffic_helper": "Clients of this server can reach the clients of the other Road Warrior servers where this option is enabled too. Connected clients get the new routes when they reconnect.",
       "compression": "Compression",
       "digest": "Digest",
       "cipher": "Cipher",
