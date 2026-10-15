@@ -28,6 +28,8 @@ const { t } = useI18n()
 
 const props = defineProps<{
   connectionsRecords: ConnectionsRecord[]
+  /** names of the servers by identifier, the server column is shown only if specified */
+  serverNames?: Record<string, string>
   currentPage: number
   totalRows: number
   pageSize: number
@@ -65,6 +67,9 @@ function formatDuration(seconds: number): string {
     :sort-descending="props.sortDescending"
     :label="t('sort.sort')"
     :options="[
+      ...(props.serverNames
+        ? [{ id: 'instance', label: t('standalone.openvpn_rw.history.server') }]
+        : []),
       { id: 'account', label: t('standalone.openvpn_rw.history.account') },
       { id: 'startTime', label: t('standalone.openvpn_rw.history.start_time') },
       { id: 'endTime', label: t('standalone.openvpn_rw.history.end_time') },
@@ -91,6 +96,13 @@ function formatDuration(seconds: number): string {
     :skeleton-rows="5"
   >
     <NeTableHead>
+      <NeTableHeadCell
+        v-if="props.serverNames"
+        :sortable="props.connectionsRecords.length > 0"
+        column-key="instance"
+        @sort="onSort"
+        >{{ t('standalone.openvpn_rw.history.server') }}</NeTableHeadCell
+      >
       <NeTableHeadCell
         :sortable="props.connectionsRecords.length > 0"
         column-key="account"
@@ -130,7 +142,16 @@ function formatDuration(seconds: number): string {
       <NeTableHeadCell>{{ t('standalone.openvpn_rw.history.received_sent') }}</NeTableHeadCell>
     </NeTableHead>
     <NeTableBody v-if="props.connectionsRecords.length > 0">
-      <NeTableRow v-for="item in props.connectionsRecords" :key="item.startTime">
+      <NeTableRow
+        v-for="item in props.connectionsRecords"
+        :key="`${item.instance}-${item.account}-${item.startTime}`"
+      >
+        <NeTableCell
+          v-if="props.serverNames"
+          :data-label="t('standalone.openvpn_rw.history.server')"
+        >
+          {{ props.serverNames[item.instance] ?? '-' }}
+        </NeTableCell>
         <NeTableCell :data-label="t('standalone.openvpn_rw.history.account')">
           {{ item.account }}
         </NeTableCell>

@@ -13,10 +13,11 @@ import {
   NeSkeleton,
   NeInlineNotification,
   NeEmptyState,
+  NeTextInput,
   getAxiosErrorMessage
 } from '@nethesis/vue-components'
 import { onMounted } from 'vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreateOrEditDatabaseDrawer from './CreateOrEditDatabaseDrawer.vue'
 import DeleteDatabaseModal from './DeleteDatabaseModal.vue'
@@ -27,6 +28,7 @@ import { useUciPendingChangesStore } from '@/stores/standalone/uciPendingChanges
 import { CanceledError } from 'axios'
 import { onUnmounted } from 'vue'
 import {
+  faCircleInfo,
   faCirclePlus,
   faDatabase,
   faPenToSquare,
@@ -69,6 +71,19 @@ const showCreateOrEditUserDrawer = ref(false)
 const showDeleteUserModal = ref(false)
 const selectedUser = ref<User>()
 const usersRequestAbortController = ref<AbortController>(new AbortController())
+
+// filter users by name or description, case insensitive
+const textFilter = ref('')
+const filteredUsers = computed(() => {
+  const filter = textFilter.value.toLowerCase()
+  if (!filter) {
+    return users.value
+  }
+  return users.value.filter(
+    (user) =>
+      user.name?.toLowerCase().includes(filter) || user.description?.toLowerCase().includes(filter)
+  )
+})
 
 function openCreateEditUserDrawer(itemToEdit?: User) {
   selectedUser.value = itemToEdit
@@ -119,6 +134,7 @@ async function refreshUsers() {
 watch(
   () => props.database,
   () => {
+    textFilter.value = ''
     usersRequestAbortController.value.abort()
     usersRequestAbortController.value = new AbortController()
     fetchUsers()
@@ -254,15 +270,34 @@ onMounted(() => {
           {{ t('standalone.users_database.add_user') }}
         </NeButton>
       </NeEmptyState>
-      <UsersTable
-        v-else
-        :is-ldap-database="database.type === 'ldap'"
-        :users="users"
-        @delete="openDeleteUserModal"
-        @edit="openCreateEditUserDrawer"
-        @set-admin="setAdmin"
-        @remove-admin="removeAdmin"
-      />
+      <template v-else>
+        <NeTextInput
+          v-model.trim="textFilter"
+          class="max-w-xs"
+          :is-search="true"
+          :placeholder="t('standalone.users_database.filter_users')"
+        />
+        <!-- no user matching the filter -->
+        <NeEmptyState
+          v-if="filteredUsers.length === 0"
+          :title="t('standalone.users_database.no_users_found')"
+          :description="t('common.try_changing_search_filters')"
+          :icon="faCircleInfo"
+        >
+          <NeButton kind="tertiary" @click="textFilter = ''">
+            {{ t('common.clear_filters') }}
+          </NeButton>
+        </NeEmptyState>
+        <UsersTable
+          v-else
+          :is-ldap-database="database.type === 'ldap'"
+          :users="filteredUsers"
+          @delete="openDeleteUserModal"
+          @edit="openCreateEditUserDrawer"
+          @set-admin="setAdmin"
+          @remove-admin="removeAdmin"
+        />
+      </template>
     </template>
   </div>
   <CreateOrEditDatabaseDrawer
