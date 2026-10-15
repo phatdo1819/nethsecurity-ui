@@ -3,8 +3,12 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  MAX_SERVER_TABS,
   RW_HISTORY_TAB,
+  RW_SERVERS_TAB,
   buildHistoryExportParams,
+  getActiveTab,
+  needsServerPicker,
   resolveSelectedTab,
   getServerLabel,
   type RWInstanceDetails
@@ -52,6 +56,34 @@ describe('resolveSelectedTab', () => {
   it('keeps the history tab and an existing server', () => {
     expect(resolveSelectedTab(RW_HISTORY_TAB, ids)).toBe(RW_HISTORY_TAB)
     expect(resolveSelectedTab('ns_roadwarrior2', ids)).toBe('ns_roadwarrior2')
+  })
+})
+
+describe('needsServerPicker', () => {
+  it('gives each server a tab up to the limit', () => {
+    expect(needsServerPicker(0)).toBe(false)
+    expect(needsServerPicker(MAX_SERVER_TABS)).toBe(false)
+  })
+
+  it('switches to a list above the limit', () => {
+    expect(needsServerPicker(MAX_SERVER_TABS + 1)).toBe(true)
+  })
+})
+
+describe('getActiveTab', () => {
+  it('highlights the tab of the server when each server has a tab', () => {
+    expect(getActiveTab('ns_roadwarrior2', false)).toBe('ns_roadwarrior2')
+    expect(getActiveTab(RW_HISTORY_TAB, false)).toBe(RW_HISTORY_TAB)
+  })
+
+  it('highlights the servers tab for any server when they are selected from a list', () => {
+    expect(getActiveTab('ns_roadwarrior2', true)).toBe(RW_SERVERS_TAB)
+    expect(getActiveTab('ns_roadwarrior12', true)).toBe(RW_SERVERS_TAB)
+  })
+
+  it('keeps the history tab and the empty selection with the list', () => {
+    expect(getActiveTab(RW_HISTORY_TAB, true)).toBe(RW_HISTORY_TAB)
+    expect(getActiveTab('', true)).toBe('')
   })
 })
 

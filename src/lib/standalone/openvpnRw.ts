@@ -16,6 +16,32 @@ export type RWInstanceDetails = {
 /** Name of the tab showing the connection history of all the servers */
 export const RW_HISTORY_TAB = 'connection-history'
 
+/** Name of the tab grouping all the servers, when they are too many to have a tab each */
+export const RW_SERVERS_TAB = 'servers'
+
+/** Maximum number of servers having a tab each: with more servers, they are selected from a list */
+export const MAX_SERVER_TABS = 5
+
+/**
+ * Tell if the servers must be selected from a list, instead of having a tab each.
+ * @param count number of servers
+ */
+export function needsServerPicker(count: number): boolean {
+  return count > MAX_SERVER_TABS
+}
+
+/**
+ * Return the tab to highlight in the tab bar.
+ * @param selected selected tab, the identifier of a server or the history tab
+ * @param serverPicker true if the servers are selected from a list: they all share the servers tab
+ */
+export function getActiveTab(selected: string, serverPicker: boolean): string {
+  if (!serverPicker || selected === '' || selected === RW_HISTORY_TAB) {
+    return selected
+  }
+  return RW_SERVERS_TAB
+}
+
 /**
  * Name of a server, chosen by the administrator when the server has been created.
  * @param server the server
