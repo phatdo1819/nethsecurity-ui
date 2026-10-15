@@ -540,6 +540,7 @@ watch(
         ref="userDatabaseRef"
         v-model="userDatabase"
         :label="t('standalone.openvpn_rw.user_database')"
+        :helper-text="t('standalone.openvpn_rw.user_database_helper')"
         :disabled="itemToEdit?.ns_description != '' || false"
         :options="userDatabaseOptions"
         :no-options-label="t('ne_combobox.no_options_label')"
@@ -672,7 +673,7 @@ watch(
           ref="portRef"
           v-model="port"
           :label="t('standalone.openvpn_rw.port')"
-          :invalid-message="t(validationErrorBag.getFirstFor('port'))"
+          :invalid-message="t(validationErrorBag.getFirstI18nKeyFor('port'))"
         />
         <NeTextInput
           ref="tunMtuRef"

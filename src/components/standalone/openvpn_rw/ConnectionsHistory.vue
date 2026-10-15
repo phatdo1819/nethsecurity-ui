@@ -24,10 +24,17 @@ import { useQuery, keepPreviousData } from '@tanstack/vue-query'
 import { useRouteQuery } from '@vueuse/router'
 import { refDebounced } from '@vueuse/core'
 import { faClockRotateLeft } from '@fortawesome/free-solid-svg-icons'
+import {
+  buildHistoryExportParams,
+  getServerLabel,
+  type RWInstanceDetails
+} from '@/lib/standalone/openvpnRw'
 
 const { t } = useI18n()
 
 export type ConnectionsRecord = {
+  /** internal identifier of the server, use the server name to show it */
+  instance: string
   account: string
   bytesReceived?: number
   bytesSent?: number
@@ -48,13 +55,29 @@ type ConnectionsHistoryResponse = {
     total: number
     filters: {
       accounts: string[]
+      instances: string[]
     }
   }
 }
 
-const props = defineProps<{
-  instance: string
+const { servers } = defineProps<{
+  /** all the Road Warrior servers */
+  servers: RWInstanceDetails[]
 }>()
+
+// names chosen by the administrator, internal identifiers are never shown
+const serverNames = computed<Record<string, string>>(() =>
+  Object.fromEntries(
+    servers.map((server) => [
+      server.instance,
+      getServerLabel(server, t('standalone.openvpn_rw.new_server'))
+    ])
+  )
+)
+const serverFilterOptions = computed<FilterOption[]>(() =>
+  servers.map((server) => ({ id: server.instance, label: serverNames.value[server.instance]! }))
+)
+const hasMultipleServers = computed(() => servers.length > 1)
 
 type RangeFilterOption = 'all' | 'last_3_months' | 'last_month' | 'last_week' | 'today'
 
@@ -84,10 +107,24 @@ const accountsFilter = useRouteQuery<string, string[]>('accounts', '', {
   }
 })
 
+// servers included in the history, all of them if empty
+const serversFilter = useRouteQuery<string, string[]>('servers', '', {
+  transform: {
+    get: (val) => (val ? val.split(',') : []),
+    set: (val) => val.join(',')
+  }
+})
+
+// ignore servers removed in the meantime
+const selectedServers = computed(() =>
+  serversFilter.value.filter((instance) => servers.some((server) => server.instance === instance))
+)
+
 const currentPage = ref(1)
 const perPage = ref(10)
 
 type SortableKeys =
+  | 'instance'
   | 'account'
   | 'startTime'
   | 'endTime'
@@ -118,6 +155,12 @@ watch(timeRangeFilter, () => {
 })
 
 watch(accountsFilter, () => {
+  if (currentPage.value !== 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(selectedServers, () => {
   if (currentPage.value !== 1) {
     currentPage.value = 1
   }
@@ -158,6 +201,7 @@ const { data, isError, error, isPending, isSuccess } = useQuery({
     textFilterDebounced,
     startTime,
     accountsFilter,
+    selectedServers,
     perPage,
     currentPage,
     sortKey,
@@ -165,7 +209,8 @@ const { data, isError, error, isPending, isSuccess } = useQuery({
   ],
   queryFn: async () =>
     ubusCall<ConnectionsHistoryResponse>('ns.ovpnrw', 'connection-history', {
-      instance: props.instance,
+      // without an instance the history of all the servers is returned
+      instances: selectedServers.value,
       q: textFilterDebounced.value.toLowerCase(),
       ...(startTime.value !== null && { start_time: startTime.value }),
       accounts: accountsFilter.value,
@@ -211,6 +256,7 @@ function clearFilters() {
   textFilter.value = ''
   timeRangeFilter.value = ['all']
   accountsFilter.value = []
+  serversFilter.value = []
 }
 
 // download all history from csv file
@@ -224,7 +270,11 @@ async function downloadAllHistory() {
   cleanError()
   try {
     const res = await ubusCall('ns.ovpnrw', 'connection-history-csv', {
-      instance: props.instance,
+      // export a single server, a subset of them or all the servers, accordingly to the servers filter
+      ...buildHistoryExportParams(
+        selectedServers.value,
+        servers.map((server) => server.instance)
+      ),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' // get the timezone of the browser
     })
     if (res?.data?.csv_path) {
@@ -304,6 +354,18 @@ async function downloadAllHistory() {
         :options-filter-placeholder="t('standalone.openvpn_rw.history.filter_accounts')"
         :more-options-hidden-label="t('ne_dropdown_filter.more_options_hidden')"
       />
+      <NeDropdownFilter
+        v-if="hasMultipleServers"
+        v-model="serversFilter"
+        kind="checkbox"
+        :label="t('standalone.openvpn_rw.history.servers')"
+        :options="serverFilterOptions"
+        :clear-search-label="t('ne_dropdown_filter.clear_search')"
+        :clear-filter-label="t('ne_dropdown_filter.clear_selection')"
+        :open-menu-aria-label="t('ne_dropdown_filter.open_filter')"
+        :no-options-label="t('ne_dropdown_filter.no_options')"
+        :more-options-hidden-label="t('ne_dropdown_filter.more_options_hidden')"
+      />
       <NeButton kind="tertiary" :disabled="isPending" @click="clearFilters">
         {{ t('standalone.openvpn_rw.history.reset_filters') }}
       </NeButton>
@@ -328,6 +390,7 @@ async function downloadAllHistory() {
     <UserConnectionsTable
       v-if="isSuccess && data!.total > 0"
       :connections-records="data!.connections"
+      :server-names="hasMultipleServers ? serverNames : undefined"
       :current-page="currentPage"
       :total-rows="data!.results"
       :page-size="perPage"
