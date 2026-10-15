@@ -81,6 +81,7 @@ const mssfixRef = ref()
 const routeTrafficThroughVpn = ref(false)
 const pushCustomNetworkRoutes = ref<string[]>([])
 const clientToClientNetworkTraffic = ref(false)
+const interServerTraffic = ref(false)
 const compression = ref('disabled')
 const digest = ref('auto')
 const cipher = ref('auto')
@@ -267,10 +268,12 @@ function resetForm() {
   if (serverData) {
     routeTrafficThroughVpn.value = serverData.ns_redirect_gateway === '1'
     clientToClientNetworkTraffic.value = serverData.client_to_client === '1'
+    interServerTraffic.value = serverData.ns_inter_server === '1'
     enabled.value = serverData.enabled === '1'
   } else {
     routeTrafficThroughVpn.value = false
     clientToClientNetworkTraffic.value = false
+    interServerTraffic.value = false
     enabled.value = true
   }
 }
@@ -434,6 +437,7 @@ async function createOrEditServer() {
       ns_local: pushCustomNetworkRoutes.value,
       ns_redirect_gateway: routeTrafficThroughVpn.value ? '1' : '0',
       client_to_client: clientToClientNetworkTraffic.value ? '1' : '0',
+      ns_inter_server: mode.value === 'routed' && interServerTraffic.value ? '1' : '0',
       compress: compression.value === 'disabled' ? '' : compression.value,
       cipher: cipher.value === 'auto' ? '' : cipher.value,
       auth: digest.value === 'auto' ? '' : digest.value,
@@ -710,6 +714,18 @@ watch(
             v-model="clientToClientNetworkTraffic"
             :label="clientToClientNetworkTraffic ? t('common.enabled') : t('common.disabled')"
           />
+        </div>
+        <div v-if="mode === 'routed'">
+          <NeFormItemLabel>{{
+            t('standalone.openvpn_rw.allow_inter_server_traffic')
+          }}</NeFormItemLabel>
+          <NeToggle
+            v-model="interServerTraffic"
+            :label="interServerTraffic ? t('common.enabled') : t('common.disabled')"
+          />
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            {{ t('standalone.openvpn_rw.allow_inter_server_traffic_helper') }}
+          </p>
         </div>
         <NeCombobox
           v-model="compression"
