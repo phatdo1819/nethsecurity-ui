@@ -4,7 +4,7 @@
 -->
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouteQuery } from '@vueuse/router'
@@ -15,7 +15,9 @@ import {
   NeInlineNotification,
   NeEmptyState,
   NeTabs,
+  NeCombobox,
   getAxiosErrorMessage,
+  type NeComboboxOption,
   type Tab
 } from '@nethesis/vue-components'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -23,7 +25,10 @@ import { faGlobe, faPlus, faWrench } from '@fortawesome/free-solid-svg-icons'
 import { ubusCall } from '@/lib/standalone/ubus'
 import {
   RW_HISTORY_TAB,
+  RW_SERVERS_TAB,
+  getActiveTab,
   getServerLabel,
+  needsServerPicker,
   resolveSelectedTab,
   type RWInstanceDetails
 } from '@/lib/standalone/openvpnRw'
@@ -130,18 +135,56 @@ const selectedTab = computed({
   }
 })
 
-// internal identifiers are never shown: each tab is named after the server
+// with many servers a tab each doesn't fit: they share a tab and are selected from a list
+const serverPicker = computed(() => needsServerPicker(serverIds.value.length))
+
+// internal identifiers are never shown: each tab or option is named after the server
+const serverOptions = computed<NeComboboxOption[]>(() =>
+  (servers.value ?? []).map((server) => ({
+    id: server.instance,
+    label: getServerLabel(server, t('standalone.openvpn_rw.new_server')),
+    description: server.enabled === '1' ? undefined : t('common.disabled')
+  }))
+)
+
 const tabs = computed<Tab[]>(() => [
-  ...(servers.value ?? []).map((server) => ({
-    name: server.instance,
-    label: getServerLabel(server, t('standalone.openvpn_rw.new_server'))
-  })),
+  ...(serverPicker.value
+    ? [{ name: RW_SERVERS_TAB, label: t('standalone.openvpn_rw.tabs.servers') }]
+    : serverOptions.value.map((option) => ({ name: option.id, label: option.label }))),
   { name: RW_HISTORY_TAB, label: t('standalone.openvpn_rw.tabs.connections_history') }
 ])
 
 const isServerSelected = computed(
   () => selectedTab.value !== '' && selectedTab.value !== RW_HISTORY_TAB
 )
+
+// server shown when coming back from the history to the servers tab
+const lastServer = ref('')
+watch(
+  selectedTab,
+  (value) => {
+    if (value !== '' && value !== RW_HISTORY_TAB) {
+      lastServer.value = value
+    }
+  },
+  { immediate: true }
+)
+
+function onSelectTab(name: string) {
+  if (name === RW_SERVERS_TAB) {
+    // an empty value selects the first server
+    selectedTab.value = serverIds.value.includes(lastServer.value) ? lastServer.value : ''
+  } else {
+    selectedTab.value = name
+  }
+}
+
+function onSelectServer(instance: string) {
+  // the list can be cleared: keep the current server
+  if (serverIds.value.includes(instance)) {
+    selectedTab.value = instance
+  }
+}
 
 // server just created, its configuration is opened automatically
 const newServer = ref('')
@@ -229,13 +272,29 @@ async function onServerDeleted() {
       </NeButton>
     </NeEmptyState>
     <template v-else>
-      <NeTabs
-        :selected="selectedTab"
-        :sr-select-tab-label="t('ne_tabs.select_a_tab')"
-        :sr-tabs-label="t('ne_tabs.tabs')"
-        :tabs="tabs"
-        class="mb-2"
-        @select-tab="selectedTab = $event"
+      <!-- long server names can exceed the page width: scroll the tab bar instead of the page -->
+      <div class="mb-2 overflow-x-auto">
+        <NeTabs
+          :selected="getActiveTab(selectedTab, serverPicker)"
+          :sr-select-tab-label="t('ne_tabs.select_a_tab')"
+          :sr-tabs-label="t('ne_tabs.tabs')"
+          :tabs="tabs"
+          @select-tab="onSelectTab"
+        />
+      </div>
+      <NeCombobox
+        v-if="serverPicker && isServerSelected"
+        :model-value="selectedTab"
+        :label="t('standalone.openvpn_rw.server')"
+        :options="serverOptions"
+        :no-options-label="t('ne_combobox.no_options_label')"
+        :no-results-label="t('ne_combobox.no_results')"
+        :optional-label="t('common.optional')"
+        :selected-label="t('ne_combobox.selected')"
+        :limited-options-label="t('ne_combobox.limited_options_label')"
+        :user-input-label="t('ne_combobox.user_input_label')"
+        class="max-w-md"
+        @update:model-value="onSelectServer"
       />
       <RWServerTab
         v-if="isServerSelected"

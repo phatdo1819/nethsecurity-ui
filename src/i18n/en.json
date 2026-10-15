@@ -2043,8 +2043,10 @@
       "user_not_valid": "Invalid user: the user has a VPN configuration but it's not present inside the remote user database.",
       "tabs": {
         "road_warrior_server": "Road Warrior server",
+        "servers": "Servers",
         "connections_history": "Connection history"
       },
+      "server": "Server",
       "history": {
         "account": "Account",
         "start_time": "Started",
