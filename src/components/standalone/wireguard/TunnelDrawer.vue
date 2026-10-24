@@ -6,7 +6,10 @@ import {
   NeTextInput,
   NeTooltip,
   NeButton,
-  NeInlineNotification
+  NeInlineNotification,
+  NeRadioSelection,
+  NeCombobox,
+  type NeComboboxOption
 } from '@nethesis/vue-components'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
@@ -15,7 +18,7 @@ import type { AxiosResponse } from 'axios'
 import AdvancedSettingsDropdown from '@/components/AdvancedSettingsDropdown.vue'
 import * as v from 'valibot'
 import { MessageBag } from '@/lib/validation.ts'
-import type { Tunnel } from '@/views/standalone/vpn/WireguardTunnelView.vue'
+import type { Tunnel, WireguardAuthMode } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import NeMultiTextInput from '@/components/standalone/NeMultiTextInput.vue'
 
 const { t } = useI18n()
@@ -24,6 +27,9 @@ const { isShown, tunnel = undefined } = defineProps<{
   isShown: boolean
   tunnel?: Tunnel
 }>()
+
+const DEFAULT_SESSION_HOURS = '8'
+const MAX_SESSION_HOURS = 168
 
 const enabled = ref(true)
 const statusLabel = computed<string>(() => {
@@ -35,11 +41,37 @@ const udpPort = ref('')
 const publicIp = ref('')
 const mtu = ref('')
 const dnsServers = ref<string[]>([''])
+// login with user credentials: shown only if the firewall supports it
+const supportsLogin = ref(false)
+const authMode = ref<WireguardAuthMode>('key')
+const userDatabase = ref('')
+const sessionHours = ref(DEFAULT_SESSION_HOURS)
+const userDatabaseOptions = ref<NeComboboxOption[]>([])
+const errorLoadingDatabases = ref(false)
+
+const authModeOptions = [
+  {
+    id: 'key',
+    label: t('standalone.wireguard_tunnel.auth_mode_key'),
+    description: t('standalone.wireguard_tunnel.auth_mode_key_description')
+  },
+  {
+    id: 'key_password',
+    label: t('standalone.wireguard_tunnel.auth_mode_key_password'),
+    description: t('standalone.wireguard_tunnel.auth_mode_key_password_description')
+  },
+  {
+    id: 'key_password_otp',
+    label: t('standalone.wireguard_tunnel.auth_mode_key_password_otp'),
+    description: t('standalone.wireguard_tunnel.auth_mode_key_password_otp_description')
+  }
+]
 
 type ServerSetup = AxiosResponse<{
   listen_port: number
   network: string
   public_endpoint: string
+  auth_modes?: WireguardAuthMode[]
 }>
 
 const disableForm = ref(false)
@@ -54,9 +86,37 @@ function loadSuggestions() {
       network.value = result.data.network
       udpPort.value = result.data.listen_port.toString()
       publicIp.value = result.data.public_endpoint
+      supportsLogin.value = result.data.auth_modes != undefined
     })
     .catch(() => (errorFetchingServerSetup.value = true))
     .finally(() => (disableForm.value = false))
+}
+
+type DatabaseList = AxiosResponse<{
+  databases: { name: string; type: string; description: string }[]
+}>
+
+function loadDatabases() {
+  errorLoadingDatabases.value = false
+  ubusCall<DatabaseList>('ns.users', 'list-databases')
+    .then((result) => {
+      // the login supports only local databases
+      userDatabaseOptions.value = result.data.databases
+        .filter((database) => database.type == 'local')
+        .map((database) => ({
+          id: database.name,
+          label:
+            database.name == 'main'
+              ? t('standalone.wireguard_tunnel.local_database')
+              : database.name,
+          description: database.description
+        }))
+      const first = userDatabaseOptions.value[0]
+      if (userDatabase.value == '' && first != undefined) {
+        userDatabase.value = first.id
+      }
+    })
+    .catch(() => (errorLoadingDatabases.value = true))
 }
 
 const validation = ref(new MessageBag())
@@ -76,6 +136,10 @@ watch(
       publicIp.value = ''
       mtu.value = ''
       dnsServers.value = ['']
+      supportsLogin.value = false
+      authMode.value = 'key'
+      userDatabase.value = ''
+      sessionHours.value = DEFAULT_SESSION_HOURS
       validation.value.clear()
       if (tunnel != undefined) {
         tunnelName.value = tunnel.name
@@ -93,11 +157,20 @@ watch(
         } else {
           dnsServers.value = ['']
         }
+        if (tunnel.auth_mode != undefined) {
+          supportsLogin.value = true
+          authMode.value = tunnel.auth_mode
+          userDatabase.value = tunnel.user_db ?? ''
+          if (tunnel.auth_timeout) {
+            sessionHours.value = Math.max(Math.round(tunnel.auth_timeout / 3600), 1).toString()
+          }
+        }
         editing.value = true
         disableForm.value = false
       } else {
         loadSuggestions()
       }
+      loadDatabases()
     }
   },
   { immediate: true }
@@ -133,7 +206,31 @@ function validate() {
     }
   }
 
+  if (supportsLogin.value && authMode.value != 'key') {
+    if (userDatabase.value == '') {
+      validation.value.set('user_db', 'error.required')
+    }
+    const hours = Number(sessionHours.value)
+    if (!Number.isInteger(hours) || hours < 1 || hours > MAX_SESSION_HOURS) {
+      validation.value.set('auth_timeout', 'standalone.wireguard_tunnel.session_length_invalid')
+    }
+  }
+
   return validation.value.size == 0
+}
+
+function loginParameters() {
+  if (!supportsLogin.value) {
+    return {}
+  }
+  if (authMode.value == 'key') {
+    return { auth_mode: authMode.value }
+  }
+  return {
+    auth_mode: authMode.value,
+    user_db: userDatabase.value,
+    auth_timeout: Number(sessionHours.value) * 3600
+  }
 }
 
 const loading = ref(false)
@@ -155,7 +252,8 @@ function submitForm() {
       listen_port: Number(udpPort.value),
       network: network.value,
       mtu: mtu.value,
-      dns: dnsServers.value
+      dns: dnsServers.value,
+      ...loginParameters()
     })
   } else {
     method = ubusCall('ns.wireguard', 'add-server', {
@@ -165,7 +263,8 @@ function submitForm() {
       listen_port: Number(udpPort.value),
       network: network.value,
       mtu: mtu.value,
-      dns: dnsServers.value
+      dns: dnsServers.value,
+      ...loginParameters()
     })
   }
   method
@@ -250,6 +349,57 @@ const saveButtonLabel = computed(() => {
           :label="t('standalone.wireguard_tunnel.public_endpoint')"
           :invalid-message="t(validation.getFirstI18nKeyFor('publicIp'))"
         />
+        <template v-if="supportsLogin">
+          <NeRadioSelection
+            v-model="authMode"
+            card
+            :label="t('standalone.wireguard_tunnel.authentication')"
+            :options="authModeOptions"
+          />
+          <NeInlineNotification
+            v-if="validation.has('auth_mode')"
+            kind="error"
+            :title="t('standalone.wireguard_tunnel.cannot_change_authentication')"
+            :description="t(validation.getFirstI18nKeyFor('auth_mode'))"
+          />
+          <template v-if="authMode != 'key'">
+            <NeInlineNotification
+              v-if="errorLoadingDatabases"
+              kind="error"
+              :title="t('standalone.wireguard_tunnel.error_loading_databases')"
+            />
+            <NeCombobox
+              v-model="userDatabase"
+              :disabled="disableForm"
+              :label="t('standalone.wireguard_tunnel.user_database')"
+              :options="userDatabaseOptions"
+              :invalid-message="t(validation.getFirstI18nKeyFor('user_db'))"
+              :no-options-label="t('ne_combobox.no_options_label')"
+              :no-results-label="t('ne_combobox.no_results')"
+              :optional-label="t('common.optional')"
+              :selected-label="t('ne_combobox.selected')"
+              :limited-options-label="t('ne_combobox.limited_options_label')"
+              :user-input-label="t('ne_combobox.user_input_label')"
+            />
+            <NeTextInput
+              v-model="sessionHours"
+              type="number"
+              min="1"
+              :max="MAX_SESSION_HOURS"
+              :disabled="disableForm"
+              :label="t('standalone.wireguard_tunnel.session_length')"
+              :invalid-message="t(validation.getFirstI18nKeyFor('auth_timeout'))"
+            >
+              <template #tooltip>
+                <NeTooltip>
+                  <template #content>
+                    {{ t('standalone.wireguard_tunnel.session_length_tooltip') }}
+                  </template>
+                </NeTooltip>
+              </template>
+            </NeTextInput>
+          </template>
+        </template>
         <AdvancedSettingsDropdown>
           <NeTextInput
             v-model="mtu"

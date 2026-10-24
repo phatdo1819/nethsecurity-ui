@@ -7,6 +7,7 @@
 import {
   NeBadgeV2,
   NeCard,
+  NeInlineNotification,
   NeHeading,
   NeEmptyState,
   NeButton,
@@ -47,8 +48,14 @@ const emit = defineEmits<{
   'add-peer': [item: Tunnel]
   'edit-peer': [instance: Tunnel, peer: Peer]
   'delete-peer': [peer: Peer]
+  'logout-peer': [peer: Peer]
+  'download-peer-otp': [peer: Peer]
   'clear-filter': []
 }>()
+
+// login with user credentials, see auth_mode
+const loginRequired = computed(() => instance.auth_mode != undefined && instance.auth_mode != 'key')
+const otpRequired = computed(() => instance.auth_mode == 'key_password_otp')
 
 const tunnelActions: NeDropdownItem[] = [
   {
@@ -78,6 +85,7 @@ const filteredPeers = computed<Peer[]>(() => {
       return (
         peer.name.toLowerCase().includes(lowerFilter) ||
         peer.reserved_ip.toLowerCase().includes(lowerFilter) ||
+        (peer.user ?? '').toLowerCase().includes(lowerFilter) ||
         peer.remote_networks.some((network) => network.toLowerCase().includes(lowerFilter)) ||
         peer.local_networks.some((network) => network.toLowerCase().includes(lowerFilter))
       )
@@ -134,6 +142,14 @@ function openPeerDrawer() {
               <span class="font-bold"> {{ t('standalone.wireguard_tunnel.dns') }}: </span>
               {{ instance.dns.join(', ') }}
             </span>
+            <span v-if="loginRequired">
+              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login') }}: </span>
+              {{ t(`standalone.wireguard_tunnel.auth_mode_${instance.auth_mode}`) }}
+            </span>
+            <span v-if="loginRequired && instance.login_url">
+              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login_page') }}: </span>
+              {{ instance.login_url }}
+            </span>
           </div>
         </div>
         <div class="flex items-start gap-2">
@@ -151,6 +167,12 @@ function openPeerDrawer() {
           <NeDropdown :items="tunnelActions" :align-to-right="true" />
         </div>
       </div>
+      <NeInlineNotification
+        v-if="loginRequired && instance.enabled && instance.auth_enforced === false"
+        kind="warning"
+        :title="t('standalone.wireguard_tunnel.login_not_enforced')"
+        :description="t('standalone.wireguard_tunnel.login_not_enforced_description')"
+      />
       <NeEmptyState
         v-if="instance.peers.length <= 0"
         :title="t('standalone.wireguard_tunnel.no_peer_configured')"
@@ -178,6 +200,9 @@ function openPeerDrawer() {
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.name') }}
           </NeTableHeadCell>
+          <NeTableHeadCell v-if="loginRequired">
+            {{ t('standalone.wireguard_tunnel.user') }}
+          </NeTableHeadCell>
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.reserved_ip') }}
           </NeTableHeadCell>
@@ -196,6 +221,9 @@ function openPeerDrawer() {
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.connection') }}
           </NeTableHeadCell>
+          <NeTableHeadCell v-if="loginRequired">
+            {{ t('standalone.wireguard_tunnel.login') }}
+          </NeTableHeadCell>
           <NeTableHeadCell>
             <!-- no header for actions -->
           </NeTableHeadCell>
@@ -205,8 +233,12 @@ function openPeerDrawer() {
             v-for="peer in paginatedItems"
             :key="peer.id"
             :peer="peer"
+            :login-required="loginRequired"
+            :otp-required="otpRequired"
             @edit="(item) => emit('edit-peer', instance, item)"
             @delete="(item) => emit('delete-peer', item)"
+            @logout="(item) => emit('logout-peer', item)"
+            @download-otp="(item) => emit('download-peer-otp', item)"
           />
         </NeTableBody>
         <template #paginator>
