@@ -31,6 +31,10 @@ export type BasePeer = {
   mtu?: number
   active: false
   latest_handshake?: string
+  // login with user credentials, only on servers with auth_mode other than 'key'
+  user?: string
+  authenticated?: boolean
+  auth_expires?: string
 }
 
 export type ActivePeer = BasePeer & {
@@ -39,6 +43,8 @@ export type ActivePeer = BasePeer & {
 }
 
 export type Peer = BasePeer | ActivePeer
+
+export type WireguardAuthMode = 'key' | 'key_password' | 'key_password_otp'
 
 export type Tunnel = {
   id: string
@@ -54,6 +60,12 @@ export type Tunnel = {
   routes: string[]
   mtu: number
   dns: string[]
+  // missing on firewalls without the login feature
+  auth_mode?: WireguardAuthMode
+  user_db?: string
+  auth_timeout?: number
+  login_url?: string
+  auth_enforced?: boolean
 }
 </script>
 

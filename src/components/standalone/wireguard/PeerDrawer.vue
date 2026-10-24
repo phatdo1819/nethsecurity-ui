@@ -6,6 +6,9 @@ import {
   NeTextInput,
   NeToggle,
   NeInlineNotification,
+  NeCombobox,
+  NeTooltip,
+  type NeComboboxOption,
   getAxiosErrorMessage
 } from '@nethesis/vue-components'
 import { useI18n } from 'vue-i18n'
@@ -47,6 +50,34 @@ const routeAllTrafficLabel = computed<string>(() => toggleState(routeAllTraffic.
 const remoteNetworks = ref<string[]>([''])
 const localNetworks = ref<string[]>([''])
 const mtu = ref('')
+// the server requires its peers to log in: each peer is linked to a user
+const loginRequired = computed(
+  () => instance?.auth_mode != undefined && instance.auth_mode != 'key'
+)
+const user = ref('')
+const userOptions = ref<NeComboboxOption[]>([])
+const errorLoadingUsers = ref(false)
+
+type UserList = AxiosResponse<{
+  users: { name: string; description: string }[]
+}>
+
+function loadUsers() {
+  errorLoadingUsers.value = false
+  userOptions.value = []
+  if (!loginRequired.value || !instance?.user_db) {
+    return
+  }
+  ubusCall<UserList>('ns.users', 'list-users', { database: instance.user_db })
+    .then((result) => {
+      userOptions.value = result.data.users.map((item) => ({
+        id: item.name,
+        label: item.name,
+        description: item.description
+      }))
+    })
+    .catch(() => (errorLoadingUsers.value = true))
+}
 
 const disableForm = ref(true)
 const loading = ref(false)
@@ -71,6 +102,7 @@ watch(
       remoteNetworks.value = ['']
       localNetworks.value = ['']
       mtu.value = ''
+      user.value = ''
       if (peer != undefined) {
         enabled.value = peer.enabled
         peerName.value = peer.name
@@ -92,10 +124,12 @@ watch(
         } else {
           mtu.value = ''
         }
+        user.value = peer.user ?? ''
         editing.value = true
       } else {
         fetchPeerConfig()
       }
+      loadUsers()
     }
   },
   { immediate: true }
@@ -146,7 +180,16 @@ function validate() {
     }
   }
 
+  if (loginRequired.value && user.value == '') {
+    validation.value.set('user', 'error.required')
+  }
+
   return validation.value.size == 0
+}
+
+function loginParameters() {
+  // peer networks would be blocked: the login identifies the peer by its reserved IP
+  return loginRequired.value ? { user: user.value, remote_networks: [] } : {}
 }
 
 function submitForm() {
@@ -167,7 +210,8 @@ function submitForm() {
       route_all_traffic: routeAllTraffic.value,
       local_networks: localNetworks.value,
       remote_networks: remoteNetworks.value,
-      mtu: mtu.value
+      mtu: mtu.value,
+      ...loginParameters()
     })
   } else {
     method = ubusCall('ns.wireguard', 'edit-peer', {
@@ -180,7 +224,8 @@ function submitForm() {
       route_all_traffic: routeAllTraffic.value,
       local_networks: localNetworks.value,
       remote_networks: remoteNetworks.value,
-      mtu: mtu.value
+      mtu: mtu.value,
+      ...loginParameters()
     })
   }
   method
@@ -253,6 +298,34 @@ const saveButtonLabel = computed(() => {
         :invalid-message="t(validation.getFirstI18nKeyFor('reserved_ip'))"
         :label="t('standalone.wireguard_tunnel.reserved_ip')"
       />
+      <template v-if="loginRequired">
+        <NeInlineNotification
+          v-if="errorLoadingUsers"
+          kind="error"
+          :title="t('standalone.wireguard_tunnel.error_loading_users')"
+        />
+        <NeCombobox
+          v-model="user"
+          :disabled="disableForm"
+          :label="t('standalone.wireguard_tunnel.user')"
+          :options="userOptions"
+          :invalid-message="t(validation.getFirstI18nKeyFor('user'))"
+          :no-options-label="t('standalone.wireguard_tunnel.no_users_in_database')"
+          :no-results-label="t('ne_combobox.no_results')"
+          :optional-label="t('common.optional')"
+          :selected-label="t('ne_combobox.selected')"
+          :limited-options-label="t('ne_combobox.limited_options_label')"
+          :user-input-label="t('ne_combobox.user_input_label')"
+        >
+          <template #tooltip>
+            <NeTooltip>
+              <template #content>
+                {{ t('standalone.wireguard_tunnel.user_tooltip') }}
+              </template>
+            </NeTooltip>
+          </template>
+        </NeCombobox>
+      </template>
       <div>
         <NeFormItemLabel>{{ t('standalone.wireguard_tunnel.pre_shared_key') }}</NeFormItemLabel>
         <NeToggle v-model="preSharedKey" :label="preSharedKeyLabel" :disabled="disableForm" />
@@ -271,6 +344,7 @@ const saveButtonLabel = computed(() => {
         :general-invalid-message="t(validation.getFirstI18nKeyFor('local_networks'))"
       />
       <NeMultiTextInput
+        v-if="!loginRequired"
         v-model="remoteNetworks"
         required
         :disable-inputs="disableForm"

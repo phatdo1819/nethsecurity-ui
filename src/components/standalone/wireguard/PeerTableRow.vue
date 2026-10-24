@@ -18,23 +18,34 @@ import {
   faCircleArrowDown,
   faCircleCheck,
   faCircleXmark,
+  faKey,
   faPenToSquare,
   faQrcode,
+  faRightFromBracket,
   faTrash
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useI18n } from 'vue-i18n'
 import { useQRCode } from '@vueuse/integrations/useQRCode'
+import { computed } from 'vue'
 
 const { t } = useI18n()
 
-const { peer } = defineProps<{
+const {
+  peer,
+  loginRequired = false,
+  otpRequired = false
+} = defineProps<{
   peer: Peer
+  loginRequired?: boolean
+  otpRequired?: boolean
 }>()
 
 const emit = defineEmits<{
   edit: [item: Peer]
   delete: [item: Peer]
+  logout: [item: Peer]
+  'download-otp': [item: Peer]
 }>()
 
 const qrCode = useQRCode(peer.config)
@@ -57,36 +68,67 @@ function downloadQrCode() {
   URL.revokeObjectURL(qrCode.value)
 }
 
-const peerActions: NeDropdownItem[] = [
-  {
-    id: 'download-config',
-    label: t('standalone.wireguard_tunnel.download_configuration'),
-    icon: faCircleArrowDown,
-    action: () => downloadConfig()
-  },
-  {
-    id: 'download-qr',
-    label: t('standalone.wireguard_tunnel.download_qr_code'),
-    icon: faQrcode,
-    action: () => downloadQrCode()
-  },
-  {
-    id: 'divider1'
-  },
-  {
-    id: 'delete',
-    label: t('standalone.wireguard_tunnel.delete_peer'),
-    icon: faTrash,
-    danger: true,
-    action: () => emit('delete', peer)
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const peerActions = computed<NeDropdownItem[]>(() => {
+  const actions: NeDropdownItem[] = [
+    {
+      id: 'download-config',
+      label: t('standalone.wireguard_tunnel.download_configuration'),
+      icon: faCircleArrowDown,
+      action: () => downloadConfig()
+    },
+    {
+      id: 'download-qr',
+      label: t('standalone.wireguard_tunnel.download_qr_code'),
+      icon: faQrcode,
+      action: () => downloadQrCode()
+    }
+  ]
+  if (otpRequired) {
+    actions.push({
+      id: 'download-otp',
+      label: t('standalone.wireguard_tunnel.download_otp_qr_code'),
+      icon: faKey,
+      disabled: !peer.user,
+      action: () => emit('download-otp', peer)
+    })
   }
-]
+  if (loginRequired) {
+    actions.push({
+      id: 'logout',
+      label: t('standalone.wireguard_tunnel.log_out_peer'),
+      icon: faRightFromBracket,
+      disabled: !peer.authenticated,
+      action: () => emit('logout', peer)
+    })
+  }
+  actions.push(
+    {
+      id: 'divider1'
+    },
+    {
+      id: 'delete',
+      label: t('standalone.wireguard_tunnel.delete_peer'),
+      icon: faTrash,
+      danger: true,
+      action: () => emit('delete', peer)
+    }
+  )
+  return actions
+})
 </script>
 
 <template>
   <NeTableRow>
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.name')">
       {{ peer.name }}
+    </NeTableCell>
+    <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.user')">
+      <template v-if="peer.user">{{ peer.user }}</template>
+      <template v-else> - </template>
     </NeTableCell>
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.reserved_ip')">
       {{ peer.reserved_ip }}
@@ -150,6 +192,25 @@ const peerActions: NeDropdownItem[] = [
               }}
             </template>
           </NeTooltip>
+        </template>
+      </div>
+    </NeTableCell>
+    <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.login')">
+      <div class="flex items-center gap-2">
+        <template v-if="peer.authenticated && peer.auth_expires">
+          <FontAwesomeIcon
+            :icon="faCircleCheck"
+            class="size-4 text-green-700 dark:text-green-500"
+          />
+          {{
+            t('standalone.wireguard_tunnel.logged_in_until', {
+              time: formatTime(peer.auth_expires)
+            })
+          }}
+        </template>
+        <template v-else>
+          <FontAwesomeIcon :icon="faCircleXmark" class="size-4 text-gray-500 dark:text-gray-400" />
+          {{ t('standalone.wireguard_tunnel.not_logged_in') }}
         </template>
       </div>
     </NeTableCell>

@@ -4,7 +4,8 @@ import {
   NeCard,
   NeEmptyState,
   NeInlineNotification,
-  NeTextInput
+  NeTextInput,
+  getAxiosErrorMessage
 } from '@nethesis/vue-components'
 import { ref } from 'vue'
 import type { AxiosResponse } from 'axios'
@@ -104,6 +105,40 @@ function peerDeleted() {
   refreshData().then(closeDeletePeerModal)
 }
 
+// errors of the peer actions that don't open a drawer
+const actionError = ref<{ title: string; description: string }>()
+
+function logoutPeer(peer: Peer) {
+  actionError.value = undefined
+  ubusCall('ns.wireguard', 'logout-peer', { id: peer.id })
+    .then(() => fetchData())
+    .catch((err) => {
+      actionError.value = {
+        title: t('standalone.wireguard_tunnel.error_logging_out_peer'),
+        description: t(getAxiosErrorMessage(err))
+      }
+    })
+}
+
+function downloadPeerOtp(peer: Peer) {
+  actionError.value = undefined
+  ubusCall('ns.wireguard', 'download-peer-2fa', { id: peer.id })
+    .then((response) => {
+      const url = URL.createObjectURL(new Blob([response.data.data], { type: 'image/svg+xml' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${peer.user || peer.name}-otp.svg`
+      link.click()
+      URL.revokeObjectURL(url)
+    })
+    .catch((err) => {
+      actionError.value = {
+        title: t('standalone.wireguard_tunnel.error_downloading_otp_qr_code'),
+        description: t(getAxiosErrorMessage(err))
+      }
+    })
+}
+
 const peerFilter = ref('')
 
 const REFRESH_SECONDS = 10
@@ -131,6 +166,12 @@ useIntervalFn(
         </p>
       </div>
       <NeInlineNotification v-if="error != undefined" kind="error" :title="t('common.error')" />
+      <NeInlineNotification
+        v-if="actionError != undefined"
+        kind="error"
+        :title="actionError.title"
+        :description="actionError.description"
+      />
       <template v-else-if="instances.length > 0">
         <div class="flex flex-wrap gap-4">
           <NeTextInput
@@ -157,6 +198,8 @@ useIntervalFn(
           @add-peer="addPeerHandler"
           @edit-peer="editPeerHandler"
           @delete-peer="deletePeerHandler"
+          @logout-peer="logoutPeer"
+          @download-peer-otp="downloadPeerOtp"
         />
       </template>
       <NeEmptyState
