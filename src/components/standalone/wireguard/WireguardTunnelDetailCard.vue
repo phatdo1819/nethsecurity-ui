@@ -136,6 +136,12 @@ function openPeerDrawer() {
               </span>
               {{ instance.public_endpoint }}
             </span>
+            <span v-if="instance.fallback_endpoints && instance.fallback_endpoints.length > 0">
+              <span class="font-bold">
+                {{ t('standalone.wireguard_tunnel.fallback_endpoints') }}:
+              </span>
+              {{ instance.fallback_endpoints.join(', ') }}
+            </span>
             <span v-if="instance.mtu != 0">
               <span class="font-bold"> {{ t('standalone.wireguard_tunnel.mtu') }}: </span>
               {{ instance.mtu }}

@@ -39,6 +39,9 @@ const tunnelName = ref('')
 const network = ref('')
 const udpPort = ref('')
 const publicIp = ref('')
+// other addresses of the server, for the clients that support them: shown only if the firewall supports it
+const maxFallbackEndpoints = ref(0)
+const fallbackEndpoints = ref<string[]>([])
 const mtu = ref('')
 const dnsServers = ref<string[]>([''])
 // login with user credentials: shown only if the firewall supports it
@@ -76,7 +79,11 @@ type ServerSetup = AxiosResponse<{
   network: string
   public_endpoint: string
   auth_modes?: WireguardAuthMode[]
+  max_fallback_endpoints?: number
 }>
+
+// the most fallback endpoints of a server, when editing one: the list of the server tells only that they're supported
+const DEFAULT_MAX_FALLBACK_ENDPOINTS = 4
 
 const disableForm = ref(false)
 const errorFetchingServerSetup = ref(false)
@@ -91,6 +98,7 @@ function loadSuggestions() {
       udpPort.value = result.data.listen_port.toString()
       publicIp.value = result.data.public_endpoint
       supportsLogin.value = result.data.auth_modes != undefined
+      maxFallbackEndpoints.value = result.data.max_fallback_endpoints ?? 0
     })
     .catch(() => (errorFetchingServerSetup.value = true))
     .finally(() => (disableForm.value = false))
@@ -138,6 +146,8 @@ watch(
       network.value = ''
       udpPort.value = ''
       publicIp.value = ''
+      maxFallbackEndpoints.value = 0
+      fallbackEndpoints.value = []
       mtu.value = ''
       dnsServers.value = ['']
       supportsLogin.value = false
@@ -151,6 +161,10 @@ watch(
         network.value = tunnel.network
         udpPort.value = tunnel.listen_port.toString()
         publicIp.value = tunnel.public_endpoint
+        if (tunnel.fallback_endpoints != undefined) {
+          maxFallbackEndpoints.value = DEFAULT_MAX_FALLBACK_ENDPOINTS
+          fallbackEndpoints.value = [...tunnel.fallback_endpoints]
+        }
         if (tunnel.mtu > 0) {
           mtu.value = tunnel.mtu.toString()
         } else {
@@ -223,6 +237,14 @@ function validate() {
   return validation.value.size == 0
 }
 
+// sent only to the firewalls that know them: the others would ignore them
+function fallbackParameters() {
+  if (maxFallbackEndpoints.value == 0) {
+    return {}
+  }
+  return { fallback_endpoints: fallbackEndpoints.value.map((item) => item.trim()).filter(Boolean) }
+}
+
 function loginParameters() {
   if (!supportsLogin.value) {
     return {}
@@ -257,6 +279,7 @@ function submitForm() {
       network: network.value,
       mtu: mtu.value,
       dns: dnsServers.value,
+      ...fallbackParameters(),
       ...loginParameters()
     })
   } else {
@@ -268,6 +291,7 @@ function submitForm() {
       network: network.value,
       mtu: mtu.value,
       dns: dnsServers.value,
+      ...fallbackParameters(),
       ...loginParameters()
     })
   }
@@ -352,6 +376,19 @@ const saveButtonLabel = computed(() => {
           :disabled="disableForm"
           :label="t('standalone.wireguard_tunnel.public_endpoint')"
           :invalid-message="t(validation.getFirstI18nKeyFor('publicIp'))"
+        />
+        <NeMultiTextInput
+          v-if="maxFallbackEndpoints > 0"
+          v-model="fallbackEndpoints"
+          :add-item-label="t('standalone.wireguard_tunnel.add_fallback_endpoint')"
+          optional
+          :disable-add-button="disableForm || fallbackEndpoints.length >= maxFallbackEndpoints"
+          :disable-inputs="disableForm"
+          :general-invalid-message="t(validation.getFirstI18nKeyFor('fallback_endpoints'))"
+          :helper-text="t('standalone.wireguard_tunnel.fallback_endpoints_helper')"
+          :optional-label="t('common.optional')"
+          :placeholder="t('standalone.wireguard_tunnel.fallback_endpoint_placeholder')"
+          :title="t('standalone.wireguard_tunnel.fallback_endpoints')"
         />
         <template v-if="supportsLogin">
           <NeRadioSelection

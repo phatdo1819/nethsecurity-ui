@@ -65,6 +65,8 @@ export type Tunnel = {
   network: string
   peers: Peer[]
   public_endpoint: string
+  // missing on firewalls without fallback endpoints
+  fallback_endpoints?: string[]
   route_all_traffic: boolean
   routes: string[]
   mtu: number
