@@ -50,6 +50,8 @@ const emit = defineEmits<{
   'delete-peer': [peer: Peer]
   'logout-peer': [peer: Peer]
   'download-peer-otp': [peer: Peer]
+  'clear-peer-alerts': [peer: Peer]
+  'regenerate-peer-keys': [peer: Peer]
   'clear-filter': []
 }>()
 
@@ -168,7 +170,13 @@ function openPeerDrawer() {
         </div>
       </div>
       <NeInlineNotification
-        v-if="loginRequired && instance.enabled && instance.auth_enforced === false"
+        v-if="loginRequired && instance.auth_blocked"
+        kind="error"
+        :title="t('standalone.wireguard_tunnel.login_blocked')"
+        :description="t('standalone.wireguard_tunnel.login_blocked_description')"
+      />
+      <NeInlineNotification
+        v-else-if="loginRequired && instance.enabled && instance.auth_enforced === false"
         kind="warning"
         :title="t('standalone.wireguard_tunnel.login_not_enforced')"
         :description="t('standalone.wireguard_tunnel.login_not_enforced_description')"
@@ -239,6 +247,8 @@ function openPeerDrawer() {
             @delete="(item) => emit('delete-peer', item)"
             @logout="(item) => emit('logout-peer', item)"
             @download-otp="(item) => emit('download-peer-otp', item)"
+            @clear-alerts="(item) => emit('clear-peer-alerts', item)"
+            @regenerate-keys="(item) => emit('regenerate-peer-keys', item)"
           />
         </NeTableBody>
         <template #paginator>

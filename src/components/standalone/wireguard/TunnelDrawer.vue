@@ -48,6 +48,10 @@ const userDatabase = ref('')
 const sessionHours = ref(DEFAULT_SESSION_HOURS)
 const userDatabaseOptions = ref<NeComboboxOption[]>([])
 const errorLoadingDatabases = ref(false)
+// once the login is required, the peers without a user can't use the VPN
+const peersWithoutUser = computed<string[]>(() =>
+  (tunnel?.peers ?? []).filter((peer) => !peer.user).map((peer) => peer.name)
+)
 
 const authModeOptions = [
   {
@@ -398,6 +402,16 @@ const saveButtonLabel = computed(() => {
                 </NeTooltip>
               </template>
             </NeTextInput>
+            <NeInlineNotification
+              v-if="peersWithoutUser.length > 0"
+              kind="warning"
+              :title="t('standalone.wireguard_tunnel.peers_without_user')"
+              :description="
+                t('standalone.wireguard_tunnel.peers_without_user_description', {
+                  names: peersWithoutUser.join(', ')
+                })
+              "
+            />
           </template>
         </template>
         <AdvancedSettingsDropdown>

@@ -471,7 +471,9 @@
     "not_allowed": "Not allowed",
     "otp_not_required": "The server doesn't require OTP",
     "2fa_download_failed": "Cannot generate the QR code",
-    "logout_failed": "Logout failed"
+    "logout_failed": "Logout failed",
+    "key_generation_failed": "Cannot generate the keys",
+    "clear_alerts_failed": "Cannot clear the warnings"
   },
   "ne_text_input": {
     "show_password": "Show password",
@@ -3126,7 +3128,26 @@
       "error_logging_out_peer": "Cannot log out the peer",
       "error_downloading_otp_qr_code": "Cannot download the OTP QR code",
       "login_not_enforced": "Login not enforced",
-      "login_not_enforced_description": "This server requires the login, but the firewall doesn't enforce it: peers can use the VPN without logging in. Check that the ns-wgauth service is running."
+      "login_not_enforced_description": "This server requires the login, but the firewall doesn't enforce it: peers can use the VPN without logging in. Check that the ns-wgauth service is running.",
+      "login_blocked": "VPN blocked",
+      "login_blocked_description": "The firewall couldn't load the login rules, so it blocks all the traffic of this server: nobody can use it until the problem is fixed. Run 'ns-wgauth check' on the firewall and look for ns-wgauth in /var/log/messages.",
+      "no_user": "No user",
+      "no_user_tooltip": "This peer can't log in until you choose a user for it.",
+      "peers_without_user": "Peers without a user",
+      "peers_without_user_description": "These peers can't log in until you choose a user for each of them: {names}",
+      "blocked": "Blocked",
+      "blocked_tooltip": "The configuration of this peer seems to be used on more than one device at the same time. Generate new keys and give the new configuration to the user, or clear the warnings to unblock the peer.",
+      "peer_warnings": "Warnings",
+      "alert_copy": "{time}: used from {addresses} at the same time",
+      "alert_lockout": "{time}: locked out after too many failed logins from {addresses}",
+      "unknown_ip": "an unknown IP",
+      "clear_peer_alerts": "Clear warnings",
+      "error_clearing_peer_alerts": "Cannot clear the warnings",
+      "regenerate_peer_keys": "Generate new keys",
+      "regenerate_peer_keys_title": "Generate new keys",
+      "regenerate_peer_keys_confirm": "Peer {name} gets new keys. After you apply the changes, its current configuration and every copy of it stop working: download the new configuration and give it to the user.",
+      "generate_keys": "Generate keys",
+      "error_regenerating_peer_keys": "Cannot generate new keys"
     },
     "wireguard_peers": {
       "title": "Tunnel peers",
