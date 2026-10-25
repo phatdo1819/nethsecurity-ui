@@ -35,6 +35,15 @@ export type BasePeer = {
   user?: string
   authenticated?: boolean
   auth_expires?: string
+  // a suspected copy of the configuration blocks the peer, if the firewall is configured so
+  blocked?: boolean
+  alerts?: PeerAlert[]
+}
+
+export type PeerAlert = {
+  time: string
+  type: 'copy' | 'lockout'
+  addresses: string[]
 }
 
 export type ActivePeer = BasePeer & {
@@ -66,6 +75,7 @@ export type Tunnel = {
   auth_timeout?: number
   login_url?: string
   auth_enforced?: boolean
+  auth_blocked?: boolean
 }
 </script>
 

@@ -17,6 +17,7 @@ import TunnelDrawer from '@/components/standalone/wireguard/TunnelDrawer.vue'
 import DeletePeerModal from '@/components/standalone/wireguard/DeletePeerModal.vue'
 import DeleteTunnelModal from '@/components/standalone/wireguard/DeleteTunnelModal.vue'
 import PeerDrawer from '@/components/standalone/wireguard/PeerDrawer.vue'
+import RegeneratePeerKeysModal from '@/components/standalone/wireguard/RegeneratePeerKeysModal.vue'
 import { useUciPendingChangesStore } from '@/stores/standalone/uciPendingChanges.ts'
 import type { Peer, Tunnel } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import { useI18n } from 'vue-i18n'
@@ -139,6 +140,23 @@ function downloadPeerOtp(peer: Peer) {
     })
 }
 
+function clearPeerAlerts(peer: Peer) {
+  actionError.value = undefined
+  ubusCall('ns.wireguard', 'clear-peer-alerts', { id: peer.id })
+    .then(() => fetchData())
+    .catch((err) => {
+      actionError.value = {
+        title: t('standalone.wireguard_tunnel.error_clearing_peer_alerts'),
+        description: t(getAxiosErrorMessage(err))
+      }
+    })
+}
+
+const peerToRegenerate = ref<Peer>()
+function peerKeysRegenerated() {
+  refreshData().then(() => (peerToRegenerate.value = undefined))
+}
+
 const peerFilter = ref('')
 
 const REFRESH_SECONDS = 10
@@ -165,13 +183,13 @@ useIntervalFn(
           {{ t('common.data_updated_every_seconds', { seconds: REFRESH_SECONDS }) }}
         </p>
       </div>
-      <NeInlineNotification v-if="error != undefined" kind="error" :title="t('common.error')" />
       <NeInlineNotification
         v-if="actionError != undefined"
         kind="error"
         :title="actionError.title"
         :description="actionError.description"
       />
+      <NeInlineNotification v-if="error != undefined" kind="error" :title="t('common.error')" />
       <template v-else-if="instances.length > 0">
         <div class="flex flex-wrap gap-4">
           <NeTextInput
@@ -200,6 +218,8 @@ useIntervalFn(
           @delete-peer="deletePeerHandler"
           @logout-peer="logoutPeer"
           @download-peer-otp="downloadPeerOtp"
+          @clear-peer-alerts="clearPeerAlerts"
+          @regenerate-peer-keys="(peer: Peer) => (peerToRegenerate = peer)"
         />
       </template>
       <NeEmptyState
@@ -235,4 +255,9 @@ useIntervalFn(
     @success="addedPeerHandler"
   />
   <DeletePeerModal :peer="peerToDelete" @success="peerDeleted" @close="closeDeletePeerModal" />
+  <RegeneratePeerKeysModal
+    :peer="peerToRegenerate"
+    @success="peerKeysRegenerated"
+    @close="peerToRegenerate = undefined"
+  />
 </template>

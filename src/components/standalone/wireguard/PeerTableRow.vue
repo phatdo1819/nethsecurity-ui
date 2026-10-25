@@ -4,7 +4,7 @@
 -->
 
 <script lang="ts" setup>
-import type { Peer } from '@/views/standalone/vpn/WireguardTunnelView.vue'
+import type { Peer, PeerAlert } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import {
   humanDistanceToNowLoc,
   NeButton,
@@ -15,6 +15,8 @@ import {
   NeTooltip
 } from '@nethesis/vue-components'
 import {
+  faBan,
+  faBroom,
   faCircleArrowDown,
   faCircleCheck,
   faCircleXmark,
@@ -22,7 +24,9 @@ import {
   faPenToSquare,
   faQrcode,
   faRightFromBracket,
-  faTrash
+  faRotate,
+  faTrash,
+  faTriangleExclamation
 } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useI18n } from 'vue-i18n'
@@ -46,6 +50,8 @@ const emit = defineEmits<{
   delete: [item: Peer]
   logout: [item: Peer]
   'download-otp': [item: Peer]
+  'clear-alerts': [item: Peer]
+  'regenerate-keys': [item: Peer]
 }>()
 
 const qrCode = useQRCode(peer.config)
@@ -70,6 +76,19 @@ function downloadQrCode() {
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+}
+
+// suspected copies of the configuration and lockouts, newest first
+const alerts = computed<PeerAlert[]>(() => peer.alerts ?? [])
+
+function describeAlert(alert: PeerAlert) {
+  return t(`standalone.wireguard_tunnel.alert_${alert.type}`, {
+    time: formatTime(alert.time),
+    addresses:
+      alert.addresses.length > 0
+        ? alert.addresses.join(', ')
+        : t('standalone.wireguard_tunnel.unknown_ip')
+  })
 }
 
 const peerActions = computed<NeDropdownItem[]>(() => {
@@ -97,15 +116,30 @@ const peerActions = computed<NeDropdownItem[]>(() => {
     })
   }
   if (loginRequired) {
-    actions.push({
-      id: 'logout',
-      label: t('standalone.wireguard_tunnel.log_out_peer'),
-      icon: faRightFromBracket,
-      disabled: !peer.authenticated,
-      action: () => emit('logout', peer)
-    })
+    actions.push(
+      {
+        id: 'logout',
+        label: t('standalone.wireguard_tunnel.log_out_peer'),
+        icon: faRightFromBracket,
+        disabled: !peer.authenticated,
+        action: () => emit('logout', peer)
+      },
+      {
+        id: 'clear-alerts',
+        label: t('standalone.wireguard_tunnel.clear_peer_alerts'),
+        icon: faBroom,
+        disabled: alerts.value.length == 0 && !peer.blocked,
+        action: () => emit('clear-alerts', peer)
+      }
+    )
   }
   actions.push(
+    {
+      id: 'regenerate-keys',
+      label: t('standalone.wireguard_tunnel.regenerate_peer_keys'),
+      icon: faRotate,
+      action: () => emit('regenerate-keys', peer)
+    },
     {
       id: 'divider1'
     },
@@ -128,7 +162,17 @@ const peerActions = computed<NeDropdownItem[]>(() => {
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.user')">
       <template v-if="peer.user">{{ peer.user }}</template>
-      <template v-else> - </template>
+      <NeTooltip v-else trigger-event="mouseenter focus" placement="top-start">
+        <template #trigger>
+          <span class="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <FontAwesomeIcon :icon="faTriangleExclamation" class="size-4" aria-hidden="true" />
+            {{ t('standalone.wireguard_tunnel.no_user') }}
+          </span>
+        </template>
+        <template #content>
+          {{ t('standalone.wireguard_tunnel.no_user_tooltip') }}
+        </template>
+      </NeTooltip>
     </NeTableCell>
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.reserved_ip')">
       {{ peer.reserved_ip }}
@@ -197,7 +241,11 @@ const peerActions = computed<NeDropdownItem[]>(() => {
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.login')">
       <div class="flex items-center gap-2">
-        <template v-if="peer.authenticated && peer.auth_expires">
+        <template v-if="peer.blocked">
+          <FontAwesomeIcon :icon="faBan" class="size-4 text-rose-700 dark:text-rose-500" />
+          {{ t('standalone.wireguard_tunnel.blocked') }}
+        </template>
+        <template v-else-if="peer.authenticated && peer.auth_expires">
           <FontAwesomeIcon
             :icon="faCircleCheck"
             class="size-4 text-green-700 dark:text-green-500"
@@ -212,6 +260,27 @@ const peerActions = computed<NeDropdownItem[]>(() => {
           <FontAwesomeIcon :icon="faCircleXmark" class="size-4 text-gray-500 dark:text-gray-400" />
           {{ t('standalone.wireguard_tunnel.not_logged_in') }}
         </template>
+        <NeTooltip
+          v-if="peer.blocked || alerts.length > 0"
+          trigger-event="mouseenter focus"
+          placement="top-start"
+        >
+          <template #trigger>
+            <FontAwesomeIcon
+              :icon="faTriangleExclamation"
+              class="size-4 text-amber-700 dark:text-amber-500"
+              :aria-label="t('standalone.wireguard_tunnel.peer_warnings')"
+            />
+          </template>
+          <template #content>
+            <p v-if="peer.blocked" class="mb-2">
+              {{ t('standalone.wireguard_tunnel.blocked_tooltip') }}
+            </p>
+            <p v-for="alert in alerts.slice(0, 5)" :key="alert.time + alert.type">
+              {{ describeAlert(alert) }}
+            </p>
+          </template>
+        </NeTooltip>
       </div>
     </NeTableCell>
     <NeTableCell :data-label="t('common.actions')">
