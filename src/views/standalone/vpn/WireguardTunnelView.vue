@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useTabs } from '@/composables/useTabs.ts'
 import WireguardServerTunnelList from '@/components/standalone/wireguard/WireguardServerTunnelList.vue'
 import WireguardPeerTunnelList from '@/components/standalone/wireguard/WireguardPeerTunnelList.vue'
+import WireguardConnectionsHistory from '@/components/standalone/wireguard/WireguardConnectionsHistory.vue'
 
 const { t } = useI18n()
 
@@ -15,6 +16,10 @@ const { tabs, selectedTab } = useTabs([
   {
     name: 'tunnel',
     label: t('standalone.wireguard_tunnel.tabs.tunnel')
+  },
+  {
+    name: 'connections',
+    label: t('standalone.wireguard_tunnel.tabs.connections')
   }
 ])
 
@@ -93,5 +98,6 @@ export type Tunnel = {
     />
     <WireguardServerTunnelList v-if="selectedTab == 'server'" />
     <WireguardPeerTunnelList v-if="selectedTab == 'tunnel'" />
+    <WireguardConnectionsHistory v-if="selectedTab == 'connections'" />
   </div>
 </template>
