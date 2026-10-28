@@ -51,6 +51,10 @@ const userDatabase = ref('')
 const sessionHours = ref(DEFAULT_SESSION_HOURS)
 const userDatabaseOptions = ref<NeComboboxOption[]>([])
 const errorLoadingDatabases = ref(false)
+// device binding, on servers with a login: shown only if the firewall supports it
+const supportsDeviceBinding = ref(false)
+const deviceBinding = ref(false)
+const machineId = ref(false)
 // once the login is required, the peers without a user can't use the VPN
 const peersWithoutUser = computed<string[]>(() =>
   (tunnel?.peers ?? []).filter((peer) => !peer.user).map((peer) => peer.name)
@@ -80,6 +84,7 @@ type ServerSetup = AxiosResponse<{
   public_endpoint: string
   auth_modes?: WireguardAuthMode[]
   max_fallback_endpoints?: number
+  device_binding?: boolean
 }>
 
 // the most fallback endpoints of a server, when editing one: the list of the server tells only that they're supported
@@ -99,6 +104,7 @@ function loadSuggestions() {
       publicIp.value = result.data.public_endpoint
       supportsLogin.value = result.data.auth_modes != undefined
       maxFallbackEndpoints.value = result.data.max_fallback_endpoints ?? 0
+      supportsDeviceBinding.value = result.data.device_binding == true
     })
     .catch(() => (errorFetchingServerSetup.value = true))
     .finally(() => (disableForm.value = false))
@@ -154,6 +160,9 @@ watch(
       authMode.value = 'key'
       userDatabase.value = ''
       sessionHours.value = DEFAULT_SESSION_HOURS
+      supportsDeviceBinding.value = false
+      deviceBinding.value = false
+      machineId.value = false
       validation.value.clear()
       if (tunnel != undefined) {
         tunnelName.value = tunnel.name
@@ -182,6 +191,11 @@ watch(
           if (tunnel.auth_timeout) {
             sessionHours.value = Math.max(Math.round(tunnel.auth_timeout / 3600), 1).toString()
           }
+        }
+        if (tunnel.device_binding != undefined) {
+          supportsDeviceBinding.value = true
+          deviceBinding.value = tunnel.device_binding
+          machineId.value = tunnel.machine_id ?? false
         }
         editing.value = true
         disableForm.value = false
@@ -255,7 +269,11 @@ function loginParameters() {
   return {
     auth_mode: authMode.value,
     user_db: userDatabase.value,
-    auth_timeout: Number(sessionHours.value) * 3600
+    auth_timeout: Number(sessionHours.value) * 3600,
+    // sent only to the firewalls that know them: missing, they keep their values
+    ...(supportsDeviceBinding.value
+      ? { device_binding: deviceBinding.value, machine_id: deviceBinding.value && machineId.value }
+      : {})
   }
 }
 
@@ -449,6 +467,44 @@ const saveButtonLabel = computed(() => {
                 })
               "
             />
+            <template v-if="supportsDeviceBinding">
+              <div>
+                <NeFormItemLabel>
+                  {{ t('standalone.wireguard_tunnel.device_binding') }}
+                  <NeTooltip>
+                    <template #content>
+                      {{ t('standalone.wireguard_tunnel.device_binding_description') }}
+                    </template>
+                  </NeTooltip>
+                </NeFormItemLabel>
+                <NeToggle
+                  v-model="deviceBinding"
+                  :disabled="disableForm"
+                  :label="t('standalone.wireguard_tunnel.device_binding_label')"
+                />
+                <p
+                  v-if="validation.has('device_binding')"
+                  class="mt-2 text-sm text-rose-700 dark:text-rose-400"
+                >
+                  {{ t(validation.getFirstI18nKeyFor('device_binding')) }}
+                </p>
+              </div>
+              <div v-if="deviceBinding">
+                <NeFormItemLabel>
+                  {{ t('standalone.wireguard_tunnel.machine_id') }}
+                  <NeTooltip>
+                    <template #content>
+                      {{ t('standalone.wireguard_tunnel.machine_id_description') }}
+                    </template>
+                  </NeTooltip>
+                </NeFormItemLabel>
+                <NeToggle
+                  v-model="machineId"
+                  :disabled="disableForm"
+                  :label="t('standalone.wireguard_tunnel.machine_id_label')"
+                />
+              </div>
+            </template>
           </template>
         </template>
         <AdvancedSettingsDropdown>

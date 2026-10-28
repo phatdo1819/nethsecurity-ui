@@ -43,12 +43,27 @@ export type BasePeer = {
   // a suspected copy of the configuration blocks the peer, if the firewall is configured so
   blocked?: boolean
   alerts?: PeerAlert[]
+  // only on servers with device binding
+  device?: PeerDevice
 }
 
 export type PeerAlert = {
   time: string
-  type: 'copy' | 'lockout'
+  type: 'copy' | 'lockout' | 'device_mismatch'
   addresses: string[]
+}
+
+export type PeerDevice = {
+  state: 'enrolled' | 'waiting' | 'closed'
+  // while waiting
+  enrollment_until?: string
+  // once enrolled
+  name?: string
+  kind?: string
+  machine_id?: boolean
+  enrolled?: string
+  last_used?: string
+  from?: string
 }
 
 export type ActivePeer = BasePeer & {
@@ -83,6 +98,9 @@ export type Tunnel = {
   login_url?: string
   auth_enforced?: boolean
   auth_blocked?: boolean
+  // missing on firewalls without device binding
+  device_binding?: boolean
+  machine_id?: boolean
 }
 </script>
 
