@@ -52,12 +52,15 @@ const emit = defineEmits<{
   'download-peer-otp': [peer: Peer]
   'clear-peer-alerts': [peer: Peer]
   'regenerate-peer-keys': [peer: Peer]
+  'allow-device-enrollment': [peer: Peer]
+  'revoke-device': [peer: Peer]
   'clear-filter': []
 }>()
 
 // login with user credentials, see auth_mode
 const loginRequired = computed(() => instance.auth_mode != undefined && instance.auth_mode != 'key')
 const otpRequired = computed(() => instance.auth_mode == 'key_password_otp')
+const deviceBinding = computed(() => loginRequired.value && instance.device_binding == true)
 
 const tunnelActions: NeDropdownItem[] = [
   {
@@ -158,6 +161,16 @@ function openPeerDrawer() {
               <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login_page') }}: </span>
               {{ instance.login_url }}
             </span>
+            <span v-if="deviceBinding">
+              <span class="font-bold">
+                {{ t('standalone.wireguard_tunnel.device_binding') }}:
+              </span>
+              {{
+                instance.machine_id
+                  ? t('standalone.wireguard_tunnel.device_binding_with_machine_id')
+                  : t('standalone.wireguard_tunnel.device_binding_on')
+              }}
+            </span>
           </div>
         </div>
         <div class="flex items-start gap-2">
@@ -238,6 +251,9 @@ function openPeerDrawer() {
           <NeTableHeadCell v-if="loginRequired">
             {{ t('standalone.wireguard_tunnel.login') }}
           </NeTableHeadCell>
+          <NeTableHeadCell v-if="deviceBinding">
+            {{ t('standalone.wireguard_tunnel.device') }}
+          </NeTableHeadCell>
           <NeTableHeadCell>
             <!-- no header for actions -->
           </NeTableHeadCell>
@@ -249,12 +265,15 @@ function openPeerDrawer() {
             :peer="peer"
             :login-required="loginRequired"
             :otp-required="otpRequired"
+            :device-binding="deviceBinding"
             @edit="(item) => emit('edit-peer', instance, item)"
             @delete="(item) => emit('delete-peer', item)"
             @logout="(item) => emit('logout-peer', item)"
             @download-otp="(item) => emit('download-peer-otp', item)"
             @clear-alerts="(item) => emit('clear-peer-alerts', item)"
             @regenerate-keys="(item) => emit('regenerate-peer-keys', item)"
+            @allow-device-enrollment="(item) => emit('allow-device-enrollment', item)"
+            @revoke-device="(item) => emit('revoke-device', item)"
           />
         </NeTableBody>
         <template #paginator>

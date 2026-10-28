@@ -152,6 +152,31 @@ function clearPeerAlerts(peer: Peer) {
     })
 }
 
+// device binding: these act at once, without applying the changes
+function allowDeviceEnrollment(peer: Peer) {
+  actionError.value = undefined
+  ubusCall('ns.wireguard', 'allow-device-enrollment', { id: peer.id })
+    .then(() => fetchData())
+    .catch((err) => {
+      actionError.value = {
+        title: t('standalone.wireguard_tunnel.error_allowing_device_enrollment'),
+        description: t(getAxiosErrorMessage(err))
+      }
+    })
+}
+
+function revokeDevice(peer: Peer) {
+  actionError.value = undefined
+  ubusCall('ns.wireguard', 'revoke-device', { id: peer.id })
+    .then(() => fetchData())
+    .catch((err) => {
+      actionError.value = {
+        title: t('standalone.wireguard_tunnel.error_revoking_device'),
+        description: t(getAxiosErrorMessage(err))
+      }
+    })
+}
+
 const peerToRegenerate = ref<Peer>()
 function peerKeysRegenerated() {
   refreshData().then(() => (peerToRegenerate.value = undefined))
@@ -219,6 +244,8 @@ useIntervalFn(
           @logout-peer="logoutPeer"
           @download-peer-otp="downloadPeerOtp"
           @clear-peer-alerts="clearPeerAlerts"
+          @allow-device-enrollment="allowDeviceEnrollment"
+          @revoke-device="revokeDevice"
           @regenerate-peer-keys="(peer: Peer) => (peerToRegenerate = peer)"
         />
       </template>

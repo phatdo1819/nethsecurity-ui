@@ -20,7 +20,10 @@ import {
   faCircleArrowDown,
   faCircleCheck,
   faCircleXmark,
+  faHourglassHalf,
   faKey,
+  faLaptop,
+  faLinkSlash,
   faPenToSquare,
   faQrcode,
   faRightFromBracket,
@@ -38,11 +41,13 @@ const { t } = useI18n()
 const {
   peer,
   loginRequired = false,
-  otpRequired = false
+  otpRequired = false,
+  deviceBinding = false
 } = defineProps<{
   peer: Peer
   loginRequired?: boolean
   otpRequired?: boolean
+  deviceBinding?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -52,7 +57,33 @@ const emit = defineEmits<{
   'download-otp': [item: Peer]
   'clear-alerts': [item: Peer]
   'regenerate-keys': [item: Peer]
+  'allow-device-enrollment': [item: Peer]
+  'revoke-device': [item: Peer]
 }>()
+
+// the device of the peer, on a server with device binding
+const deviceState = computed(() => peer.device?.state ?? 'closed')
+
+const deviceTooltip = computed(() => {
+  const device = peer.device
+  if (deviceState.value == 'waiting') {
+    return t('standalone.wireguard_tunnel.device_waiting_tooltip', {
+      time: device?.enrollment_until ? formatTime(device.enrollment_until) : '-'
+    })
+  }
+  if (deviceState.value == 'closed' || device == undefined) {
+    return t('standalone.wireguard_tunnel.device_closed_tooltip')
+  }
+  const text = t('standalone.wireguard_tunnel.device_enrolled_tooltip', {
+    enrolled: device.enrolled ? formatTime(device.enrolled) : '-',
+    from: device.from || t('standalone.wireguard_tunnel.unknown_ip'),
+    last_used: device.last_used ? formatTime(device.last_used) : '-',
+    kind: device.kind || '-'
+  })
+  return device.machine_id
+    ? `${text} ${t('standalone.wireguard_tunnel.device_enrolled_machine_id')}`
+    : text
+})
 
 const qrCode = useQRCode(peer.config)
 
@@ -130,6 +161,23 @@ const peerActions = computed<NeDropdownItem[]>(() => {
         icon: faBroom,
         disabled: alerts.value.length == 0 && !peer.blocked,
         action: () => emit('clear-alerts', peer)
+      }
+    )
+  }
+  if (deviceBinding) {
+    actions.push(
+      {
+        id: 'allow-device-enrollment',
+        label: t('standalone.wireguard_tunnel.allow_device_enrollment'),
+        icon: faLaptop,
+        action: () => emit('allow-device-enrollment', peer)
+      },
+      {
+        id: 'revoke-device',
+        label: t('standalone.wireguard_tunnel.revoke_device'),
+        icon: faLinkSlash,
+        disabled: deviceState.value == 'closed',
+        action: () => emit('revoke-device', peer)
       }
     )
   }
@@ -282,6 +330,35 @@ const peerActions = computed<NeDropdownItem[]>(() => {
           </template>
         </NeTooltip>
       </div>
+    </NeTableCell>
+    <NeTableCell v-if="deviceBinding" :data-label="t('standalone.wireguard_tunnel.device')">
+      <NeTooltip trigger-event="mouseenter focus" placement="top-start">
+        <template #trigger>
+          <span v-if="deviceState == 'enrolled'" class="flex items-center gap-2">
+            <FontAwesomeIcon
+              :icon="faLaptop"
+              class="size-4 text-green-700 dark:text-green-500"
+              aria-hidden="true"
+            />
+            {{ peer.device?.name || t('standalone.wireguard_tunnel.device_enrolled_unnamed') }}
+          </span>
+          <span v-else-if="deviceState == 'waiting'" class="flex items-center gap-2">
+            <FontAwesomeIcon
+              :icon="faHourglassHalf"
+              class="size-4 text-gray-500 dark:text-gray-400"
+              aria-hidden="true"
+            />
+            {{ t('standalone.wireguard_tunnel.device_waiting') }}
+          </span>
+          <span v-else class="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <FontAwesomeIcon :icon="faTriangleExclamation" class="size-4" aria-hidden="true" />
+            {{ t('standalone.wireguard_tunnel.device_closed') }}
+          </span>
+        </template>
+        <template #content>
+          {{ deviceTooltip }}
+        </template>
+      </NeTooltip>
     </NeTableCell>
     <NeTableCell :data-label="t('common.actions')">
       <div class="flex justify-end gap-2">
