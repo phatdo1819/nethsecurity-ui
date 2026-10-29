@@ -62,6 +62,24 @@ const loginRequired = computed(() => instance.auth_mode != undefined && instance
 const otpRequired = computed(() => instance.auth_mode == 'key_password_otp')
 const deviceBinding = computed(() => loginRequired.value && instance.device_binding == true)
 
+// one peer per user on a server: for each peer, the other peers of its user, linked before the rule
+const sharedWith = computed<Record<string, string[]>>(() => {
+  const byUser = new Map<string, Peer[]>()
+  for (const peer of instance.peers) {
+    if (peer.user) {
+      const key = peer.user.toLowerCase()
+      byUser.set(key, [...(byUser.get(key) ?? []), peer])
+    }
+  }
+  const result: Record<string, string[]> = {}
+  for (const peers of byUser.values()) {
+    for (const peer of peers) {
+      result[peer.id] = peers.filter((other) => other.id != peer.id).map((other) => other.name)
+    }
+  }
+  return result
+})
+
 const tunnelActions: NeDropdownItem[] = [
   {
     id: 'edit',
@@ -266,6 +284,7 @@ function openPeerDrawer() {
             :login-required="loginRequired"
             :otp-required="otpRequired"
             :device-binding="deviceBinding"
+            :shared-with="loginRequired ? (sharedWith[peer.id] ?? []) : []"
             @edit="(item) => emit('edit-peer', instance, item)"
             @delete="(item) => emit('delete-peer', item)"
             @logout="(item) => emit('logout-peer', item)"
