@@ -42,12 +42,15 @@ const {
   peer,
   loginRequired = false,
   otpRequired = false,
-  deviceBinding = false
+  deviceBinding = false,
+  sharedWith = []
 } = defineProps<{
   peer: Peer
   loginRequired?: boolean
   otpRequired?: boolean
   deviceBinding?: boolean
+  // the other peers of the server with the same user, linked before the rule of one peer per user
+  sharedWith?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -209,7 +212,24 @@ const peerActions = computed<NeDropdownItem[]>(() => {
       {{ peer.name }}
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.user')">
-      <template v-if="peer.user">{{ peer.user }}</template>
+      <NeTooltip
+        v-if="peer.user && sharedWith.length > 0"
+        trigger-event="mouseenter focus"
+        placement="top-start"
+      >
+        <template #trigger>
+          <span class="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <FontAwesomeIcon :icon="faTriangleExclamation" class="size-4" aria-hidden="true" />
+            {{ peer.user }}
+          </span>
+        </template>
+        <template #content>
+          {{
+            t('standalone.wireguard_tunnel.user_shared_tooltip', { peers: sharedWith.join(', ') })
+          }}
+        </template>
+      </NeTooltip>
+      <template v-else-if="peer.user">{{ peer.user }}</template>
       <NeTooltip v-else trigger-event="mouseenter focus" placement="top-start">
         <template #trigger>
           <span class="flex items-center gap-2 text-amber-700 dark:text-amber-500">

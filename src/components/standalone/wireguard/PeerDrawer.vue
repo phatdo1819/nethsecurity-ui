@@ -62,6 +62,17 @@ type UserList = AxiosResponse<{
   users: { name: string; description: string }[]
 }>
 
+// One peer per user on a server: the name of the other peer that has the user, if any. The user the peer has
+// stays possible, even when another peer shares it since before the rule.
+function peerOfUser(name: string): string | undefined {
+  if (peer?.user && name.toLowerCase() == peer.user.toLowerCase()) {
+    return undefined
+  }
+  return instance?.peers.find(
+    (other) => other.id != peer?.id && other.user && other.user.toLowerCase() == name.toLowerCase()
+  )?.name
+}
+
 function loadUsers() {
   errorLoadingUsers.value = false
   userOptions.value = []
@@ -70,11 +81,18 @@ function loadUsers() {
   }
   ubusCall<UserList>('ns.users', 'list-users', { database: instance.user_db })
     .then((result) => {
-      userOptions.value = result.data.users.map((item) => ({
-        id: item.name,
-        label: item.name,
-        description: item.description
-      }))
+      userOptions.value = result.data.users.map((item) => {
+        const other = peerOfUser(item.name)
+        return {
+          id: item.name,
+          label: item.name,
+          description:
+            other == undefined
+              ? item.description
+              : t('standalone.wireguard_tunnel.user_has_peer_option', { peer: other }),
+          disabled: other != undefined
+        }
+      })
     })
     .catch(() => (errorLoadingUsers.value = true))
 }
@@ -182,6 +200,8 @@ function validate() {
 
   if (loginRequired.value && user.value == '') {
     validation.value.set('user', 'error.required')
+  } else if (loginRequired.value && peerOfUser(user.value) != undefined) {
+    validation.value.set('user', 'error.user_has_peer')
   }
 
   return validation.value.size == 0
