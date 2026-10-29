@@ -8,7 +8,6 @@ import {
   getAxiosErrorMessage
 } from '@nethesis/vue-components'
 import { ref } from 'vue'
-import type { AxiosResponse } from 'axios'
 import { ubusCall } from '@/lib/standalone/ubus.ts'
 import { faCirclePlus, faGlobe } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -18,39 +17,42 @@ import DeletePeerModal from '@/components/standalone/wireguard/DeletePeerModal.v
 import DeleteTunnelModal from '@/components/standalone/wireguard/DeleteTunnelModal.vue'
 import PeerDrawer from '@/components/standalone/wireguard/PeerDrawer.vue'
 import RegeneratePeerKeysModal from '@/components/standalone/wireguard/RegeneratePeerKeysModal.vue'
-import { useUciPendingChangesStore } from '@/stores/standalone/uciPendingChanges.ts'
 import type { Peer, Tunnel } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import { useI18n } from 'vue-i18n'
-import { useIntervalFn } from '@vueuse/core'
 
 const { t } = useI18n()
-const changes = useUciPendingChangesStore()
 
-type ListInstancesResponse = {
-  instances: Tunnel[]
-}
+// the page loads the servers, for their tabs: this shows the one of the selected tab
+const {
+  instance = undefined,
+  loading,
+  error = undefined,
+  refreshSeconds,
+  reload,
+  refresh
+} = defineProps<{
+  // undefined when there are no servers
+  instance?: Tunnel
+  loading: boolean
+  error?: Error
+  refreshSeconds: number
+  // the servers again
+  reload: () => Promise<unknown>
+  // the servers and the changes to apply again; after the drawer of a server, the one just added is selected
+  refresh: (serverSaved?: boolean) => Promise<unknown>
+}>()
 
-const loading = ref(true)
-const error = ref<Error>()
-const instances = ref<Tunnel[]>([])
-
-async function fetchData(): Promise<AxiosResponse<ListInstancesResponse>> {
-  error.value = undefined
-  return ubusCall<AxiosResponse<ListInstancesResponse>>('ns.wireguard', 'list-servers')
-    .then((response) => {
-      instances.value = response.data.instances
-    })
-    .catch((err) => (error.value = err))
-    .finally(() => (loading.value = false))
+function fetchData(): Promise<unknown> {
+  return reload()
 }
 
 function refreshData(): Promise<unknown> {
-  return Promise.all([changes.getChanges(), fetchData()])
+  return refresh()
 }
 
 const showTunnelDrawer = ref(false)
 function createdTunnel() {
-  refreshData().finally(() => closeTunnelDrawer())
+  refresh(true).finally(() => closeTunnelDrawer())
 }
 
 const editingTunnel = ref<Tunnel>()
@@ -182,18 +184,8 @@ function peerKeysRegenerated() {
   refreshData().then(() => (peerToRegenerate.value = undefined))
 }
 
+// kept from server to server: a name can be looked for on each
 const peerFilter = ref('')
-
-const REFRESH_SECONDS = 10
-useIntervalFn(
-  () => {
-    fetchData()
-  },
-  REFRESH_SECONDS * 1000,
-  {
-    immediateCallback: true
-  }
-)
 </script>
 
 <template>
@@ -205,7 +197,7 @@ useIntervalFn(
           {{ t('standalone.wireguard_tunnel.description') }}
         </p>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ t('common.data_updated_every_seconds', { seconds: REFRESH_SECONDS }) }}
+          {{ t('common.data_updated_every_seconds', { seconds: refreshSeconds }) }}
         </p>
       </div>
       <NeInlineNotification
@@ -215,7 +207,7 @@ useIntervalFn(
         :description="actionError.description"
       />
       <NeInlineNotification v-if="error != undefined" kind="error" :title="t('common.error')" />
-      <template v-else-if="instances.length > 0">
+      <template v-else-if="instance">
         <div class="flex flex-wrap gap-4">
           <NeTextInput
             v-model="peerFilter"
@@ -231,7 +223,6 @@ useIntervalFn(
           </NeButton>
         </div>
         <WireguardTunnelDetailCard
-          v-for="instance in instances"
           :key="instance.id"
           :instance="instance"
           :filter="peerFilter"

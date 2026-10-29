@@ -18,7 +18,8 @@ import {
   NeTableHead,
   NeTableBody,
   useItemPagination,
-  NePaginator
+  NePaginator,
+  type NeBadgeV2Kind
 } from '@nethesis/vue-components'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -28,11 +29,19 @@ import {
   faCirclePlus,
   faCircleXmark,
   faGlobe,
+  faKey,
   faPenToSquare,
+  faShieldHalved,
   faTrash,
-  faUserGroup
+  faUserGroup,
+  faUserLock,
+  type IconDefinition
 } from '@fortawesome/free-solid-svg-icons'
-import type { Peer, Tunnel } from '@/views/standalone/vpn/WireguardTunnelView.vue'
+import type {
+  Peer,
+  Tunnel,
+  WireguardAuthMode
+} from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import PeerTableRow from '@/components/standalone/wireguard/PeerTableRow.vue'
 
 const { t } = useI18n()
@@ -61,6 +70,16 @@ const emit = defineEmits<{
 const loginRequired = computed(() => instance.auth_mode != undefined && instance.auth_mode != 'key')
 const otpRequired = computed(() => instance.auth_mode == 'key_password_otp')
 const deviceBinding = computed(() => loginRequired.value && instance.device_binding == true)
+
+// how the peers get in, next to the name: missing on firewalls without the login feature
+const AUTH_BADGES: Record<WireguardAuthMode, { kind: NeBadgeV2Kind; icon: IconDefinition }> = {
+  key: { kind: 'gray', icon: faKey },
+  key_password: { kind: 'blue', icon: faUserLock },
+  key_password_otp: { kind: 'indigo', icon: faShieldHalved }
+}
+const authBadge = computed(() =>
+  instance.auth_mode != undefined ? AUTH_BADGES[instance.auth_mode] : undefined
+)
 
 // one peer per user on a server: for each peer, the other peers of its user, linked before the rule
 const sharedWith = computed<Record<string, string[]>>(() => {
@@ -141,6 +160,10 @@ function openPeerDrawer() {
               <FontAwesomeIcon :icon="faCircleXmark" class="size-4" />
               {{ t('common.disabled') }}
             </NeBadgeV2>
+            <NeBadgeV2 v-if="authBadge" :kind="authBadge.kind" size="xs">
+              <FontAwesomeIcon :icon="authBadge.icon" class="size-4" />
+              {{ t(`standalone.wireguard_tunnel.auth_mode_${instance.auth_mode}`) }}
+            </NeBadgeV2>
           </div>
           <div class="flex flex-wrap gap-x-8 gap-y-2">
             <span>
@@ -170,10 +193,6 @@ function openPeerDrawer() {
             <span v-if="instance.dns.length > 0">
               <span class="font-bold"> {{ t('standalone.wireguard_tunnel.dns') }}: </span>
               {{ instance.dns.join(', ') }}
-            </span>
-            <span v-if="loginRequired">
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login') }}: </span>
-              {{ t(`standalone.wireguard_tunnel.auth_mode_${instance.auth_mode}`) }}
             </span>
             <span v-if="loginRequired && instance.login_url">
               <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login_page') }}: </span>

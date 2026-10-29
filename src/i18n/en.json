@@ -3050,9 +3050,11 @@
       "description": "On this page, you can create WireGuard tunnels; the WireGuard protocol is lightweight, modern, and widely supported across platforms. WireGuard tunnels can be used to securely connect remote networks with minimal overhead and strong cryptography.",
       "tabs": {
         "server": "Server tunnel",
+        "servers": "Server tunnels",
         "tunnel": "Peer tunnel",
         "connections": "Connections"
       },
+      "server": "Server",
       "vpn_network": "VPN network",
       "port": "Port",
       "endpoint": "Endpoint",
