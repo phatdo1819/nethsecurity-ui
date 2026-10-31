@@ -196,6 +196,8 @@ export type BasePeer = {
   latest_handshake?: string
   // login with user credentials, only on servers with auth_mode other than 'key'
   user?: string
+  // the user doesn't exist anymore: the peer can't log in
+  user_missing?: boolean
   authenticated?: boolean
   auth_expires?: string
   // a suspected copy of the configuration blocks the peer, if the firewall is configured so
