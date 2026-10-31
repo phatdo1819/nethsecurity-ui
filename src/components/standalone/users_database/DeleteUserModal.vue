@@ -5,7 +5,7 @@
 
 <script setup lang="ts">
 import { ubusCall } from '@/lib/standalone/ubus'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NeInlineNotification, getAxiosErrorMessage } from '@nethesis/vue-components'
 import { NeModal } from '@nethesis/vue-components'
@@ -25,6 +25,27 @@ const error = ref({
   notificationDetails: ''
 })
 const isDeleting = ref(false)
+
+// the WireGuard peers deleted with the user, on the servers with the login: none on firewalls without the method
+type UserPeer = { id: string; name: string; server: string; server_name: string }
+const wireguardPeers = ref<UserPeer[]>([])
+
+watch(
+  () => (props.visible ? props.itemToDelete?.name : undefined),
+  (name) => {
+    wireguardPeers.value = []
+    if (name) {
+      ubusCall('ns.wireguard', 'list-user-peers', { user: name, database: 'main' })
+        .then((response) => {
+          if (props.itemToDelete?.name == name) {
+            wireguardPeers.value = response.data.peers ?? []
+          }
+        })
+        .catch(() => (wireguardPeers.value = []))
+    }
+  },
+  { immediate: true }
+)
 
 async function deleteUser() {
   if (props.itemToDelete) {
@@ -71,6 +92,13 @@ function close() {
         name: itemToDelete?.name ?? ''
       })
     }}
+    <p v-if="wireguardPeers.length > 0" class="mt-2">
+      {{
+        t('standalone.users_database.delete_user_wireguard_peers', {
+          peers: wireguardPeers.map((peer) => `${peer.name} (${peer.server_name})`).join(', ')
+        })
+      }}
+    </p>
     <NeInlineNotification
       v-if="error.notificationDescription"
       kind="error"

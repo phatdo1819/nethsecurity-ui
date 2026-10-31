@@ -237,7 +237,22 @@ const peerActions = computed<NeDropdownItem[]>(() => {
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.user')">
       <NeTooltip
-        v-if="peer.user && sharedWith.length > 0"
+        v-if="peer.user && peer.user_missing"
+        trigger-event="mouseenter focus"
+        placement="top-start"
+      >
+        <template #trigger>
+          <span class="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <FontAwesomeIcon :icon="faTriangleExclamation" class="size-4" aria-hidden="true" />
+            {{ peer.user }}
+          </span>
+        </template>
+        <template #content>
+          {{ t('standalone.wireguard_tunnel.user_missing_tooltip', { user: peer.user }) }}
+        </template>
+      </NeTooltip>
+      <NeTooltip
+        v-else-if="peer.user && sharedWith.length > 0"
         trigger-event="mouseenter focus"
         placement="top-start"
       >
