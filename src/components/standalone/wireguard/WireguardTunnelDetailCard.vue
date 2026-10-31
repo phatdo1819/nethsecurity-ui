@@ -81,6 +81,62 @@ const authBadge = computed(() =>
   instance.auth_mode != undefined ? AUTH_BADGES[instance.auth_mode] : undefined
 )
 
+// the settings of the server, in a grid under its name
+const details = computed<{ label: string; value: string | number }[]>(() => {
+  const items: { label: string; value: string | number }[] = [
+    { label: t('standalone.wireguard_tunnel.vpn_network'), value: instance.network },
+    { label: t('standalone.wireguard_tunnel.port'), value: instance.listen_port },
+    { label: t('standalone.wireguard_tunnel.public_endpoint'), value: instance.public_endpoint }
+  ]
+  if (instance.fallback_endpoints && instance.fallback_endpoints.length > 0) {
+    items.push({
+      label: t('standalone.wireguard_tunnel.fallback_endpoints'),
+      value: instance.fallback_endpoints.join(', ')
+    })
+  }
+  if (instance.mtu != 0) {
+    items.push({ label: t('standalone.wireguard_tunnel.mtu'), value: instance.mtu })
+  }
+  if (instance.dns.length > 0) {
+    items.push({ label: t('standalone.wireguard_tunnel.dns'), value: instance.dns.join(', ') })
+  }
+  if (loginRequired.value && instance.login_url) {
+    items.push({ label: t('standalone.wireguard_tunnel.login_page'), value: instance.login_url })
+  }
+  if (deviceBinding.value) {
+    items.push({
+      label: t('standalone.wireguard_tunnel.device_binding'),
+      value: instance.machine_id
+        ? t('standalone.wireguard_tunnel.device_binding_with_machine_id')
+        : t('standalone.wireguard_tunnel.device_binding_on')
+    })
+  }
+  return items
+})
+
+// the columns of the peers that are often empty, shown only when a peer of the server has a value
+const showServerNetworks = computed(() =>
+  instance.peers.some((peer) => peer.route_all_traffic || peer.local_networks.length > 0)
+)
+const showPeerNetworks = computed(() =>
+  instance.peers.some((peer) => peer.remote_networks.length > 0)
+)
+const showMtu = computed(() => instance.peers.some((peer) => peer.mtu && peer.mtu > 0))
+// a table of up to 6 columns fits from 1280 pixels, a wider one from 1536: cards below
+const cardBreakpoint = computed<'xl' | '2xl'>(() => {
+  const columns =
+    4 +
+    [
+      loginRequired.value,
+      loginRequired.value,
+      deviceBinding.value,
+      showServerNetworks.value,
+      showPeerNetworks.value,
+      showMtu.value
+    ].filter(Boolean).length
+  return columns <= 6 ? 'xl' : '2xl'
+})
+
 // one peer per user on a server: for each peer, the other peers of its user, linked before the rule
 const sharedWith = computed<Record<string, string[]>>(() => {
   const byUser = new Map<string, Peer[]>()
@@ -148,69 +204,24 @@ function openPeerDrawer() {
 <template>
   <NeCard>
     <div class="space-y-6">
-      <div class="flex flex-wrap gap-8">
-        <div class="mr-auto space-y-4">
-          <div class="flex items-center gap-8">
-            <NeHeading tag="h4">{{ instance.name }}</NeHeading>
-            <NeBadgeV2 v-if="instance.enabled" kind="green" size="xs">
-              <FontAwesomeIcon :icon="faCircleCheck" class="size-4" />
-              {{ t('common.enabled') }}
-            </NeBadgeV2>
-            <NeBadgeV2 v-else kind="gray" size="xs">
-              <FontAwesomeIcon :icon="faCircleXmark" class="size-4" />
-              {{ t('common.disabled') }}
-            </NeBadgeV2>
-            <NeBadgeV2 v-if="authBadge" :kind="authBadge.kind" size="xs">
-              <FontAwesomeIcon :icon="authBadge.icon" class="size-4" />
-              {{ t(`standalone.wireguard_tunnel.auth_mode_${instance.auth_mode}`) }}
-            </NeBadgeV2>
-          </div>
-          <div class="flex flex-wrap gap-x-8 gap-y-2">
-            <span>
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.vpn_network') }}: </span>
-              {{ instance.network }}
-            </span>
-            <span>
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.port') }}: </span>
-              {{ instance.listen_port }}
-            </span>
-            <span>
-              <span class="font-bold">
-                {{ t('standalone.wireguard_tunnel.public_endpoint') }}:
-              </span>
-              {{ instance.public_endpoint }}
-            </span>
-            <span v-if="instance.fallback_endpoints && instance.fallback_endpoints.length > 0">
-              <span class="font-bold">
-                {{ t('standalone.wireguard_tunnel.fallback_endpoints') }}:
-              </span>
-              {{ instance.fallback_endpoints.join(', ') }}
-            </span>
-            <span v-if="instance.mtu != 0">
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.mtu') }}: </span>
-              {{ instance.mtu }}
-            </span>
-            <span v-if="instance.dns.length > 0">
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.dns') }}: </span>
-              {{ instance.dns.join(', ') }}
-            </span>
-            <span v-if="loginRequired && instance.login_url">
-              <span class="font-bold"> {{ t('standalone.wireguard_tunnel.login_page') }}: </span>
-              {{ instance.login_url }}
-            </span>
-            <span v-if="deviceBinding">
-              <span class="font-bold">
-                {{ t('standalone.wireguard_tunnel.device_binding') }}:
-              </span>
-              {{
-                instance.machine_id
-                  ? t('standalone.wireguard_tunnel.device_binding_with_machine_id')
-                  : t('standalone.wireguard_tunnel.device_binding_on')
-              }}
-            </span>
-          </div>
+      <!-- on a phone the buttons go under the name and the badges -->
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <NeHeading tag="h4">{{ instance.name }}</NeHeading>
+          <NeBadgeV2 v-if="instance.enabled" kind="green" size="xs">
+            <FontAwesomeIcon :icon="faCircleCheck" class="size-4" />
+            {{ t('common.enabled') }}
+          </NeBadgeV2>
+          <NeBadgeV2 v-else kind="gray" size="xs">
+            <FontAwesomeIcon :icon="faCircleXmark" class="size-4" />
+            {{ t('common.disabled') }}
+          </NeBadgeV2>
+          <NeBadgeV2 v-if="authBadge" :kind="authBadge.kind" size="xs">
+            <FontAwesomeIcon :icon="authBadge.icon" class="size-4" />
+            {{ t(`standalone.wireguard_tunnel.auth_mode_${instance.auth_mode}`) }}
+          </NeBadgeV2>
         </div>
-        <div class="flex items-start gap-2">
+        <div class="flex shrink-0 items-center gap-2">
           <NeButton
             v-if="instance.peers.length > 0"
             kind="primary"
@@ -225,6 +236,12 @@ function openPeerDrawer() {
           <NeDropdown :items="tunnelActions" :align-to-right="true" />
         </div>
       </div>
+      <dl class="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div v-for="item in details" :key="item.label">
+          <dt class="font-semibold">{{ item.label }}</dt>
+          <dd class="mt-1 break-words text-gray-600 dark:text-gray-300">{{ item.value }}</dd>
+        </div>
+      </dl>
       <NeInlineNotification
         v-if="loginRequired && instance.auth_blocked"
         kind="error"
@@ -259,7 +276,11 @@ function openPeerDrawer() {
           {{ t('common.clear_filter') }}
         </NeButton>
       </NeEmptyState>
-      <NeTable v-else :aria-label="t('standalone.wireguard_tunnel.peers')" card-breakpoint="2xl">
+      <NeTable
+        v-else
+        :aria-label="t('standalone.wireguard_tunnel.peers')"
+        :card-breakpoint="cardBreakpoint"
+      >
         <NeTableHead>
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.name') }}
@@ -270,17 +291,14 @@ function openPeerDrawer() {
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.reserved_ip') }}
           </NeTableHeadCell>
-          <NeTableHeadCell>
+          <NeTableHeadCell v-if="showServerNetworks">
             {{ t('standalone.wireguard_tunnel.server_networks') }}
           </NeTableHeadCell>
-          <NeTableHeadCell>
+          <NeTableHeadCell v-if="showPeerNetworks">
             {{ t('standalone.wireguard_tunnel.peer_networks') }}
           </NeTableHeadCell>
-          <NeTableHeadCell>
+          <NeTableHeadCell v-if="showMtu">
             {{ t('standalone.wireguard_tunnel.mtu') }}
-          </NeTableHeadCell>
-          <NeTableHeadCell>
-            {{ t('standalone.wireguard_tunnel.status') }}
           </NeTableHeadCell>
           <NeTableHeadCell>
             {{ t('standalone.wireguard_tunnel.connection') }}
@@ -303,6 +321,9 @@ function openPeerDrawer() {
             :login-required="loginRequired"
             :otp-required="otpRequired"
             :device-binding="deviceBinding"
+            :show-server-networks="showServerNetworks"
+            :show-peer-networks="showPeerNetworks"
+            :show-mtu="showMtu"
             :shared-with="loginRequired ? (sharedWith[peer.id] ?? []) : []"
             @edit="(item) => emit('edit-peer', instance, item)"
             @delete="(item) => emit('delete-peer', item)"

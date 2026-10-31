@@ -231,7 +231,7 @@ async function downloadAllHistory() {
 
 <template>
   <div class="flex flex-col gap-y-6">
-    <div class="mb-4 flex flex-row justify-between">
+    <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
       <p class="max-w-2xl text-sm font-normal text-gray-500 dark:text-gray-400">
         {{ t('standalone.wireguard_tunnel.history.description') }}
       </p>
@@ -240,7 +240,6 @@ async function downloadAllHistory() {
           v-if="isSuccess && data!.results > 0"
           kind="secondary"
           size="lg"
-          class="ml-4 shrink-0"
           @click="downloadAllHistory()"
         >
           <template #prefix>

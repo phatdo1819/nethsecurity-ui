@@ -7,6 +7,7 @@
 import type { Peer, PeerAlert } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import {
   humanDistanceToNowLoc,
+  NeBadgeV2,
   NeButton,
   NeDropdown,
   type NeDropdownItem,
@@ -43,12 +44,19 @@ const {
   loginRequired = false,
   otpRequired = false,
   deviceBinding = false,
+  showServerNetworks = true,
+  showPeerNetworks = true,
+  showMtu = true,
   sharedWith = []
 } = defineProps<{
   peer: Peer
   loginRequired?: boolean
   otpRequired?: boolean
   deviceBinding?: boolean
+  // the columns that the server hides when none of its peers has a value
+  showServerNetworks?: boolean
+  showPeerNetworks?: boolean
+  showMtu?: boolean
   // the other peers of the server with the same user, linked before the rule of one peer per user
   sharedWith?: string[]
 }>()
@@ -78,6 +86,7 @@ const deviceTooltip = computed(() => {
     return t('standalone.wireguard_tunnel.device_closed_tooltip')
   }
   const text = t('standalone.wireguard_tunnel.device_enrolled_tooltip', {
+    name: device.name || t('standalone.wireguard_tunnel.device_enrolled_unnamed'),
     enrolled: device.enrolled ? formatTime(device.enrolled) : '-',
     from: device.from || t('standalone.wireguard_tunnel.unknown_ip'),
     last_used: device.last_used ? formatTime(device.last_used) : '-',
@@ -88,7 +97,8 @@ const deviceTooltip = computed(() => {
     : text
 })
 
-const qrCode = useQRCode(peer.config)
+// follows the configuration: new keys or a changed server give a new code
+const qrCode = useQRCode(() => peer.config)
 
 function downloadConfig() {
   const blob = new Blob([peer.config], { type: 'text/plain' })
@@ -105,11 +115,19 @@ function downloadQrCode() {
   link.href = qrCode.value
   link.download = `${peer.name}.png`
   link.click()
-  URL.revokeObjectURL(qrCode.value)
 }
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+}
+
+// the end of a session: the time alone when it's today
+function formatSessionEnd(iso: string) {
+  const end = new Date(iso)
+  if (end.toDateString() == new Date().toDateString()) {
+    return end.toLocaleTimeString([], { timeStyle: 'short' })
+  }
+  return formatTime(iso)
 }
 
 // suspected copies of the configuration and lockouts, newest first
@@ -209,7 +227,13 @@ const peerActions = computed<NeDropdownItem[]>(() => {
 <template>
   <NeTableRow>
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.name')">
-      {{ peer.name }}
+      <div class="flex flex-wrap items-center gap-2">
+        {{ peer.name }}
+        <NeBadgeV2 v-if="!peer.enabled" kind="gray" size="xs">
+          <FontAwesomeIcon :icon="faCircleXmark" class="size-4" aria-hidden="true" />
+          {{ t('common.disabled') }}
+        </NeBadgeV2>
+      </div>
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.user')">
       <NeTooltip
@@ -245,7 +269,10 @@ const peerActions = computed<NeDropdownItem[]>(() => {
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.reserved_ip')">
       {{ peer.reserved_ip }}
     </NeTableCell>
-    <NeTableCell :data-label="t('standalone.wireguard_tunnel.server_networks')">
+    <NeTableCell
+      v-if="showServerNetworks"
+      :data-label="t('standalone.wireguard_tunnel.server_networks')"
+    >
       <template v-if="peer.route_all_traffic">
         {{ t('standalone.wireguard_tunnel.all_traffic') }}
       </template>
@@ -254,35 +281,23 @@ const peerActions = computed<NeDropdownItem[]>(() => {
       </template>
       <template v-else> - </template>
     </NeTableCell>
-    <NeTableCell :data-label="t('standalone.wireguard_tunnel.peer_networks')">
+    <NeTableCell
+      v-if="showPeerNetworks"
+      :data-label="t('standalone.wireguard_tunnel.peer_networks')"
+    >
       <template v-if="peer.remote_networks.length > 0">
         {{ peer.remote_networks.join(', ') }}
       </template>
       <template v-else> - </template>
     </NeTableCell>
-    <NeTableCell :data-label="t('standalone.wireguard_tunnel.mtu')">
+    <NeTableCell v-if="showMtu" :data-label="t('standalone.wireguard_tunnel.mtu')">
       <template v-if="peer.mtu && peer.mtu > 0">
         {{ peer.mtu }}
       </template>
       <template v-else> - </template>
     </NeTableCell>
-    <NeTableCell :data-label="t('standalone.wireguard_tunnel.status')">
-      <div class="flex items-center gap-1">
-        <template v-if="peer.enabled">
-          <FontAwesomeIcon
-            :icon="faCircleCheck"
-            class="size-4 text-green-700 dark:text-green-500"
-          />
-          {{ t('common.enabled') }}
-        </template>
-        <template v-else>
-          <FontAwesomeIcon :icon="faCircleXmark" class="size-4 text-red-700 dark:text-red-500" />
-          {{ t('common.disabled') }}
-        </template>
-      </div>
-    </NeTableCell>
     <NeTableCell :data-label="t('standalone.wireguard_tunnel.connection')">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 whitespace-nowrap">
         <template v-if="peer.active">
           <FontAwesomeIcon
             :icon="faCircleCheck"
@@ -308,7 +323,7 @@ const peerActions = computed<NeDropdownItem[]>(() => {
       </div>
     </NeTableCell>
     <NeTableCell v-if="loginRequired" :data-label="t('standalone.wireguard_tunnel.login')">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 whitespace-nowrap">
         <template v-if="peer.blocked">
           <FontAwesomeIcon :icon="faBan" class="size-4 text-rose-700 dark:text-rose-500" />
           {{ t('standalone.wireguard_tunnel.blocked') }}
@@ -318,11 +333,16 @@ const peerActions = computed<NeDropdownItem[]>(() => {
             :icon="faCircleCheck"
             class="size-4 text-green-700 dark:text-green-500"
           />
-          {{
-            t('standalone.wireguard_tunnel.logged_in_until', {
-              time: formatTime(peer.auth_expires)
-            })
-          }}
+          <div>
+            <div>{{ t('standalone.wireguard_tunnel.logged_in') }}</div>
+            <div class="text-gray-500 dark:text-gray-400">
+              {{
+                t('standalone.wireguard_tunnel.session_until', {
+                  time: formatSessionEnd(peer.auth_expires)
+                })
+              }}
+            </div>
+          </div>
         </template>
         <template v-else>
           <FontAwesomeIcon :icon="faCircleXmark" class="size-4 text-gray-500 dark:text-gray-400" />
@@ -357,21 +377,28 @@ const peerActions = computed<NeDropdownItem[]>(() => {
           <span v-if="deviceState == 'enrolled'" class="flex items-center gap-2">
             <FontAwesomeIcon
               :icon="faLaptop"
-              class="size-4 text-green-700 dark:text-green-500"
+              class="size-4 shrink-0 text-green-700 dark:text-green-500"
               aria-hidden="true"
             />
-            {{ peer.device?.name || t('standalone.wireguard_tunnel.device_enrolled_unnamed') }}
+            <!-- a long name is cut: the tooltip names the device too -->
+            <span class="max-w-48 truncate">
+              {{ peer.device?.name || t('standalone.wireguard_tunnel.device_enrolled_unnamed') }}
+            </span>
           </span>
           <span v-else-if="deviceState == 'waiting'" class="flex items-center gap-2">
             <FontAwesomeIcon
               :icon="faHourglassHalf"
-              class="size-4 text-gray-500 dark:text-gray-400"
+              class="size-4 shrink-0 text-gray-500 dark:text-gray-400"
               aria-hidden="true"
             />
             {{ t('standalone.wireguard_tunnel.device_waiting') }}
           </span>
           <span v-else class="flex items-center gap-2 text-amber-700 dark:text-amber-500">
-            <FontAwesomeIcon :icon="faTriangleExclamation" class="size-4" aria-hidden="true" />
+            <FontAwesomeIcon
+              :icon="faTriangleExclamation"
+              class="size-4 shrink-0"
+              aria-hidden="true"
+            />
             {{ t('standalone.wireguard_tunnel.device_closed') }}
           </span>
         </template>
