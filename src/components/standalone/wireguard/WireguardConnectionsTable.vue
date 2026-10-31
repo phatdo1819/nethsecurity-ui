@@ -56,8 +56,18 @@ function formatDuration(seconds: number): string {
   return `${pad(hours)}h ${pad(minutes)}m ${pad(secs)}s`
 }
 
+// the date and the time on two lines
+function formatDay(seconds: number): string {
+  return formatDateLoc(new Date(seconds * 1000), 'PP')
+}
+
 function formatTime(seconds: number): string {
-  return formatDateLoc(new Date(seconds * 1000), 'PPpp')
+  return formatDateLoc(new Date(seconds * 1000), 'pp')
+}
+
+// the user under the peer, unless the peer is named after it
+function showUser(item: WireguardConnection): boolean {
+  return !!item.user && item.user.toLowerCase() != item.account.toLowerCase()
 }
 
 const columns: { key: string; label: string }[] = [
@@ -114,27 +124,36 @@ const columns: { key: string; label: string }[] = [
     <NeTableBody v-if="props.connections.length > 0">
       <NeTableRow v-for="item in props.connections" :key="`${item.peer}-${item.startTime}`">
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.peer')">
-          <div>{{ item.account || '-' }}</div>
-          <div v-if="item.user" class="text-sm text-gray-500 dark:text-gray-400">
-            {{ item.user }}
+          <!-- one element per cell: in the cards each element of a cell takes a column -->
+          <div>
+            <div>{{ item.account || '-' }}</div>
+            <div v-if="showUser(item)" class="text-gray-500 dark:text-gray-400">
+              {{ item.user }}
+            </div>
           </div>
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.server')">
           {{ props.serverNames[item.instance] ?? item.instance }}
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.start_time')">
-          {{ formatTime(item.startTime) }}
+          <div class="whitespace-nowrap">
+            <div>{{ formatDay(item.startTime) }}</div>
+            <div class="text-gray-500 dark:text-gray-400">{{ formatTime(item.startTime) }}</div>
+          </div>
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.end_time')">
           <NeBadgeV2 v-if="item.connected" kind="green" size="xs">
             <FontAwesomeIcon :icon="faCircleCheck" class="size-4" aria-hidden="true" />
             {{ t('standalone.wireguard_tunnel.history.connected') }}
           </NeBadgeV2>
-          <template v-else-if="item.endTime">{{ formatTime(item.endTime) }}</template>
+          <div v-else-if="item.endTime" class="whitespace-nowrap">
+            <div>{{ formatDay(item.endTime) }}</div>
+            <div class="text-gray-500 dark:text-gray-400">{{ formatTime(item.endTime) }}</div>
+          </div>
           <template v-else>-</template>
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.duration')">
-          {{ formatDuration(item.duration) }}
+          <span class="whitespace-nowrap">{{ formatDuration(item.duration) }}</span>
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.virtual_ip_address')">
           {{ item.virtualIpAddress || '-' }}
@@ -143,10 +162,23 @@ const columns: { key: string; label: string }[] = [
           {{ item.remoteIpAddress || '-' }}
         </NeTableCell>
         <NeTableCell :data-label="t('standalone.wireguard_tunnel.history.received_sent')">
-          <div class="flex flex-row items-center">
-            <FontAwesomeIcon :icon="faArrowDown" class="mr-2 h-4 w-4" aria-hidden="true" />
-            {{ byteFormat1024(item.bytesReceived) }} / {{ byteFormat1024(item.bytesSent) }}
-            <FontAwesomeIcon :icon="faArrowUp" class="ml-2 h-4 w-4" aria-hidden="true" />
+          <div class="whitespace-nowrap">
+            <div class="flex items-center gap-2">
+              <FontAwesomeIcon
+                :icon="faArrowDown"
+                class="size-3 text-gray-500 dark:text-gray-400"
+                :aria-label="t('standalone.wireguard_tunnel.history.bytes_received')"
+              />
+              {{ byteFormat1024(item.bytesReceived) }}
+            </div>
+            <div class="flex items-center gap-2">
+              <FontAwesomeIcon
+                :icon="faArrowUp"
+                class="size-3 text-gray-500 dark:text-gray-400"
+                :aria-label="t('standalone.wireguard_tunnel.history.bytes_sent')"
+              />
+              {{ byteFormat1024(item.bytesSent) }}
+            </div>
           </div>
         </NeTableCell>
       </NeTableRow>

@@ -8,7 +8,7 @@ import {
 } from '@nethesis/vue-components'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useIntervalFn } from '@vueuse/core'
+import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
 import { useRouteQuery } from '@vueuse/router'
 import type { AxiosResponse } from 'axios'
 import { ubusCall } from '@/lib/standalone/ubus.ts'
@@ -39,14 +39,31 @@ type ListInstancesResponse = {
   instances: Tunnel[]
 }
 
+// the calls not answered yet: the polling waits for them, a busy firewall can take longer than its interval
+let pendingCalls = 0
+// only the answer of the last call is shown: an older one answered late, like a poll sent before a server was
+// saved, would bring back what was there before
+let lastCall = 0
+
 function fetchServers(): Promise<unknown> {
+  const call = ++lastCall
   error.value = undefined
+  pendingCalls++
   return ubusCall<AxiosResponse<ListInstancesResponse>>('ns.wireguard', 'list-servers')
     .then((response) => {
-      instances.value = response.data.instances
+      if (call == lastCall) {
+        instances.value = response.data.instances
+      }
     })
-    .catch((err) => (error.value = err))
-    .finally(() => (loading.value = false))
+    .catch((err) => {
+      if (call == lastCall) {
+        error.value = err
+      }
+    })
+    .finally(() => {
+      loading.value = false
+      pendingCalls--
+    })
 }
 
 // the selected tab is stored inside the route: the identifier of a server, or one of the other tabs
@@ -73,11 +90,26 @@ async function refreshServers(serverSaved = false) {
   }
 }
 
-// the servers are looked at every few seconds only while one is shown
+// the servers are looked at every few seconds only while one is shown, and not while the browser tab is hidden
 const REFRESH_SECONDS = 10
-const { pause, resume } = useIntervalFn(fetchServers, REFRESH_SECONDS * 1000, {
+const visibility = useDocumentVisibility()
+
+function poll() {
+  if (pendingCalls == 0 && visibility.value == 'visible') {
+    fetchServers()
+  }
+}
+
+const { pause, resume } = useIntervalFn(poll, REFRESH_SECONDS * 1000, {
   immediate: false,
   immediateCallback: true
+})
+
+// back on the browser tab: the data of the time it was hidden at once
+watch(visibility, (value) => {
+  if (value == 'visible' && showsServer.value) {
+    poll()
+  }
 })
 watch(
   showsServer,

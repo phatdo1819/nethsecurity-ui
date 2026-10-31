@@ -20,6 +20,7 @@ import * as v from 'valibot'
 import { MessageBag } from '@/lib/validation.ts'
 import type { Tunnel, WireguardAuthMode } from '@/views/standalone/vpn/WireguardTunnelView.vue'
 import NeMultiTextInput from '@/components/standalone/NeMultiTextInput.vue'
+import { faKey, faShieldHalved, faUserLock } from '@fortawesome/free-solid-svg-icons'
 
 const { t } = useI18n()
 
@@ -60,21 +61,25 @@ const peersWithoutUser = computed<string[]>(() =>
   (tunnel?.peers ?? []).filter((peer) => !peer.user).map((peer) => peer.name)
 )
 
+// one under the other, with the icons of the badges of the server card
 const authModeOptions = [
   {
     id: 'key',
     label: t('standalone.wireguard_tunnel.auth_mode_key'),
-    description: t('standalone.wireguard_tunnel.auth_mode_key_description')
+    description: t('standalone.wireguard_tunnel.auth_mode_key_description'),
+    icon: faKey
   },
   {
     id: 'key_password',
     label: t('standalone.wireguard_tunnel.auth_mode_key_password'),
-    description: t('standalone.wireguard_tunnel.auth_mode_key_password_description')
+    description: t('standalone.wireguard_tunnel.auth_mode_key_password_description'),
+    icon: faUserLock
   },
   {
     id: 'key_password_otp',
     label: t('standalone.wireguard_tunnel.auth_mode_key_password_otp'),
-    description: t('standalone.wireguard_tunnel.auth_mode_key_password_otp_description')
+    description: t('standalone.wireguard_tunnel.auth_mode_key_password_otp_description'),
+    icon: faShieldHalved
   }
 ]
 
@@ -412,9 +417,18 @@ const saveButtonLabel = computed(() => {
           <NeRadioSelection
             v-model="authMode"
             card
+            card-size="lg"
+            grid-style="grid-cols-1 gap-3"
             :label="t('standalone.wireguard_tunnel.authentication')"
             :options="authModeOptions"
-          />
+          >
+            <template #option="{ option }">
+              <div class="flex flex-col gap-y-1 pr-6 text-left text-sm">
+                <p class="font-medium">{{ option.label }}</p>
+                <p class="text-gray-500 dark:text-gray-400">{{ option.description }}</p>
+              </div>
+            </template>
+          </NeRadioSelection>
           <NeInlineNotification
             v-if="validation.has('auth_mode')"
             kind="error"
