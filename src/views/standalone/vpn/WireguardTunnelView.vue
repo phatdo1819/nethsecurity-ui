@@ -224,6 +224,9 @@ export type PeerDevice = {
   enrolled?: string
   last_used?: string
   from?: string
+  // 'device' once the device gave the peer a WireGuard key of its own: the configuration file no longer connects
+  wireguard_key?: 'device' | 'configuration'
+  wireguard_key_set?: string
 }
 
 export type ActivePeer = BasePeer & {
