@@ -75,6 +75,9 @@ const emit = defineEmits<{
 // the device of the peer, on a server with device binding
 const deviceState = computed(() => peer.device?.state ?? 'closed')
 
+// the device gave the peer a WireGuard key of its own: the configuration file no longer connects
+const ownKey = computed(() => deviceState.value == 'enrolled' && peer.device?.wireguard_key == 'device')
+
 const deviceTooltip = computed(() => {
   const device = peer.device
   if (deviceState.value == 'waiting') {
@@ -92,9 +95,18 @@ const deviceTooltip = computed(() => {
     last_used: device.last_used ? formatTime(device.last_used) : '-',
     kind: device.kind || '-'
   })
-  return device.machine_id
-    ? `${text} ${t('standalone.wireguard_tunnel.device_enrolled_machine_id')}`
-    : text
+  const parts = [text]
+  if (device.machine_id) {
+    parts.push(t('standalone.wireguard_tunnel.device_enrolled_machine_id'))
+  }
+  if (ownKey.value) {
+    parts.push(
+      t('standalone.wireguard_tunnel.device_own_key', {
+        time: device.wireguard_key_set ? formatTime(device.wireguard_key_set) : '-'
+      })
+    )
+  }
+  return parts.join(' ')
 })
 
 // follows the configuration: new keys or a changed server give a new code
@@ -398,6 +410,15 @@ const peerActions = computed<NeDropdownItem[]>(() => {
             <!-- a long name is cut: the tooltip names the device too -->
             <span class="max-w-48 truncate">
               {{ peer.device?.name || t('standalone.wireguard_tunnel.device_enrolled_unnamed') }}
+            </span>
+            <FontAwesomeIcon
+              v-if="ownKey"
+              :icon="faKey"
+              class="size-3.5 shrink-0 text-gray-500 dark:text-gray-400"
+              :title="t('standalone.wireguard_tunnel.device_own_key_label')"
+            />
+            <span v-if="ownKey" class="sr-only">
+              {{ t('standalone.wireguard_tunnel.device_own_key_label') }}
             </span>
           </span>
           <span v-else-if="deviceState == 'waiting'" class="flex items-center gap-2">
