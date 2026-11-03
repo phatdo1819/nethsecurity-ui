@@ -241,7 +241,6 @@ export type WireguardAuthMode = 'key' | 'key_password' | 'key_password_otp'
 export type Tunnel = {
   id: string
   address: string
-  client_to_client: boolean
   enabled: boolean
   listen_port: number
   name: string
@@ -264,6 +263,10 @@ export type Tunnel = {
   // missing on firewalls without device binding
   device_binding?: boolean
   machine_id?: boolean
+  // missing on firewalls without the traffic between peers: the peers of the server reach each other, and the
+  // peers of the listed servers, one way
+  client_to_client?: boolean
+  reachable_servers?: string[]
 }
 </script>
 
@@ -297,6 +300,7 @@ export type Tunnel = {
       />
       <WireguardServerTunnelList
         :instance="selectedServer"
+        :servers="instances"
         :loading="loading"
         :error="error"
         :refresh-seconds="REFRESH_SECONDS"

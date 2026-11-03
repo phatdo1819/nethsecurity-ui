@@ -46,8 +46,14 @@ import PeerTableRow from '@/components/standalone/wireguard/PeerTableRow.vue'
 
 const { t } = useI18n()
 
-const { instance, filter } = defineProps<{
+const {
+  instance,
+  servers = [],
+  filter
+} = defineProps<{
   instance: Tunnel
+  // all the servers: the traffic between them
+  servers?: Tunnel[]
   filter: string
 }>()
 
@@ -109,6 +115,30 @@ const details = computed<{ label: string; value: string | number }[]>(() => {
       value: instance.machine_id
         ? t('standalone.wireguard_tunnel.device_binding_with_machine_id')
         : t('standalone.wireguard_tunnel.device_binding_on')
+    })
+  }
+  if (instance.client_to_client) {
+    items.push({
+      label: t('standalone.wireguard_tunnel.client_to_client'),
+      value: t('standalone.wireguard_tunnel.client_to_client_on')
+    })
+  }
+  // one way each: the servers this one reaches, and the ones that reach it
+  const serverName = (id: string) => servers.find((server) => server.id == id)?.name ?? id
+  const reaches = instance.reachable_servers ?? []
+  if (reaches.length > 0) {
+    items.push({
+      label: t('standalone.wireguard_tunnel.reaches_servers'),
+      value: reaches.map(serverName).join(', ')
+    })
+  }
+  const reachedBy = servers.filter(
+    (server) => server.id != instance.id && server.reachable_servers?.includes(instance.id)
+  )
+  if (reachedBy.length > 0) {
+    items.push({
+      label: t('standalone.wireguard_tunnel.reached_by_servers'),
+      value: reachedBy.map((server) => server.name).join(', ')
     })
   }
   return items
