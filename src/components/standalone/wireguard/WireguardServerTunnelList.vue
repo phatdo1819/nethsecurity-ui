@@ -25,6 +25,7 @@ const { t } = useI18n()
 // the page loads the servers, for their tabs: this shows the one of the selected tab
 const {
   instance = undefined,
+  servers = [],
   loading,
   error = undefined,
   refreshSeconds,
@@ -33,6 +34,8 @@ const {
 } = defineProps<{
   // undefined when there are no servers
   instance?: Tunnel
+  // all the servers: the traffic between them
+  servers?: Tunnel[]
   loading: boolean
   error?: Error
   refreshSeconds: number
@@ -225,6 +228,7 @@ const peerFilter = ref('')
         <WireguardTunnelDetailCard
           :key="instance.id"
           :instance="instance"
+          :servers="servers"
           :filter="peerFilter"
           @clear-filter="peerFilter = ''"
           @edit="editTunnel"
@@ -257,6 +261,7 @@ const peerFilter = ref('')
   <TunnelDrawer
     :is-shown="showTunnelDrawer"
     :tunnel="editingTunnel"
+    :servers="servers"
     @success="createdTunnel"
     @close="closeTunnelDrawer"
   />

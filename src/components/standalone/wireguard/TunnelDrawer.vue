@@ -24,9 +24,15 @@ import { faKey, faShieldHalved, faUserLock } from '@fortawesome/free-solid-svg-i
 
 const { t } = useI18n()
 
-const { isShown, tunnel = undefined } = defineProps<{
+const {
+  isShown,
+  tunnel = undefined,
+  servers = []
+} = defineProps<{
   isShown: boolean
   tunnel?: Tunnel
+  // all the servers, for the traffic between them
+  servers?: Tunnel[]
 }>()
 
 const DEFAULT_SESSION_HOURS = '8'
@@ -56,6 +62,21 @@ const errorLoadingDatabases = ref(false)
 const supportsDeviceBinding = ref(false)
 const deviceBinding = ref(false)
 const machineId = ref(false)
+// the traffic between peers: shown only if the firewall supports it
+const supportsPeerTraffic = ref(false)
+const clientToClient = ref(false)
+// the other servers, taken when the drawer opens: the list of the page is refreshed every few seconds
+const reachableServerOptions = ref<NeComboboxOption[]>([])
+const reachableServers = ref<NeComboboxOption[]>([])
+// a change of the list changes the configurations of the peers, on both sides
+const savedReachableServers = ref<string[]>([])
+const reachableServersChanged = computed(() => {
+  const ids = reachableServers.value.map((option) => option.id)
+  return (
+    ids.length != savedReachableServers.value.length ||
+    ids.some((id) => !savedReachableServers.value.includes(id))
+  )
+})
 // once the login is required, the peers without a user can't use the VPN
 const peersWithoutUser = computed<string[]>(() =>
   (tunnel?.peers ?? []).filter((peer) => !peer.user).map((peer) => peer.name)
@@ -90,6 +111,7 @@ type ServerSetup = AxiosResponse<{
   auth_modes?: WireguardAuthMode[]
   max_fallback_endpoints?: number
   device_binding?: boolean
+  peer_traffic?: boolean
 }>
 
 // the most fallback endpoints of a server, when editing one: the list of the server tells only that they're supported
@@ -110,6 +132,7 @@ function loadSuggestions() {
       supportsLogin.value = result.data.auth_modes != undefined
       maxFallbackEndpoints.value = result.data.max_fallback_endpoints ?? 0
       supportsDeviceBinding.value = result.data.device_binding == true
+      supportsPeerTraffic.value = result.data.peer_traffic == true
     })
     .catch(() => (errorFetchingServerSetup.value = true))
     .finally(() => (disableForm.value = false))
@@ -168,6 +191,13 @@ watch(
       supportsDeviceBinding.value = false
       deviceBinding.value = false
       machineId.value = false
+      supportsPeerTraffic.value = false
+      clientToClient.value = false
+      reachableServerOptions.value = servers
+        .filter((server) => server.id != tunnel?.id)
+        .map((server) => ({ id: server.id, label: server.name, description: server.network }))
+      reachableServers.value = []
+      savedReachableServers.value = []
       validation.value.clear()
       if (tunnel != undefined) {
         tunnelName.value = tunnel.name
@@ -201,6 +231,14 @@ watch(
           supportsDeviceBinding.value = true
           deviceBinding.value = tunnel.device_binding
           machineId.value = tunnel.machine_id ?? false
+        }
+        if (tunnel.client_to_client != undefined) {
+          supportsPeerTraffic.value = true
+          clientToClient.value = tunnel.client_to_client
+          savedReachableServers.value = [...(tunnel.reachable_servers ?? [])]
+          reachableServers.value = reachableServerOptions.value.filter((option) =>
+            savedReachableServers.value.includes(option.id)
+          )
         }
         editing.value = true
         disableForm.value = false
@@ -282,6 +320,17 @@ function loginParameters() {
   }
 }
 
+// sent only to the firewalls that know them: missing, they keep their values
+function trafficParameters() {
+  if (!supportsPeerTraffic.value) {
+    return {}
+  }
+  return {
+    client_to_client: clientToClient.value,
+    reachable_servers: reachableServers.value.map((option) => option.id)
+  }
+}
+
 const loading = ref(false)
 const error = ref<Error>()
 function submitForm() {
@@ -303,7 +352,8 @@ function submitForm() {
       mtu: mtu.value,
       dns: dnsServers.value,
       ...fallbackParameters(),
-      ...loginParameters()
+      ...loginParameters(),
+      ...trafficParameters()
     })
   } else {
     method = ubusCall('ns.wireguard', 'add-server', {
@@ -315,7 +365,8 @@ function submitForm() {
       mtu: mtu.value,
       dns: dnsServers.value,
       ...fallbackParameters(),
-      ...loginParameters()
+      ...loginParameters(),
+      ...trafficParameters()
     })
   }
   method
@@ -520,6 +571,42 @@ const saveButtonLabel = computed(() => {
               </div>
             </template>
           </template>
+        </template>
+        <template v-if="supportsPeerTraffic">
+          <div>
+            <NeFormItemLabel>{{ t('standalone.wireguard_tunnel.client_to_client') }}</NeFormItemLabel>
+            <NeToggle
+              v-model="clientToClient"
+              :disabled="disableForm"
+              :label="t('standalone.wireguard_tunnel.client_to_client_label')"
+            />
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('standalone.wireguard_tunnel.client_to_client_helper') }}
+            </p>
+          </div>
+          <NeCombobox
+            v-model="reachableServers"
+            multiple
+            optional
+            :disabled="disableForm"
+            :label="t('standalone.wireguard_tunnel.reachable_servers')"
+            :helper-text="t('standalone.wireguard_tunnel.reachable_servers_helper')"
+            :placeholder="t('standalone.wireguard_tunnel.choose_servers')"
+            :options="reachableServerOptions"
+            :invalid-message="t(validation.getFirstI18nKeyFor('reachable_servers'))"
+            :no-options-label="t('standalone.wireguard_tunnel.no_other_servers')"
+            :no-results-label="t('ne_combobox.no_results')"
+            :optional-label="t('common.optional')"
+            :selected-label="t('ne_combobox.selected')"
+            :limited-options-label="t('ne_combobox.limited_options_label')"
+            :user-input-label="t('ne_combobox.user_input_label')"
+          />
+          <NeInlineNotification
+            v-if="reachableServersChanged"
+            kind="info"
+            :title="t('standalone.wireguard_tunnel.peer_routes_change')"
+            :description="t('standalone.wireguard_tunnel.peer_routes_change_description')"
+          />
         </template>
         <AdvancedSettingsDropdown>
           <NeTextInput
