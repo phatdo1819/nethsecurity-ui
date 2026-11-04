@@ -9,6 +9,7 @@ import {
   NeInlineNotification,
   NeRadioSelection,
   NeCombobox,
+  NeCheckbox,
   type NeComboboxOption
 } from '@nethesis/vue-components'
 import { useI18n } from 'vue-i18n'
@@ -66,12 +67,18 @@ const machineId = ref(false)
 const supportsPeerTraffic = ref(false)
 const clientToClient = ref(false)
 // the other servers, taken when the drawer opens: the list of the page is refreshed every few seconds
-const reachableServerOptions = ref<NeComboboxOption[]>([])
-const reachableServers = ref<NeComboboxOption[]>([])
+const reachableServerOptions = ref<{ id: string; label: string; description: string }[]>([])
+// checked or not, by server id
+const reachableServers = ref<Record<string, boolean>>({})
+const reachableServerIds = computed<string[]>(() =>
+  reachableServerOptions.value
+    .filter((option) => reachableServers.value[option.id])
+    .map((option) => option.id)
+)
 // a change of the list changes the configurations of the peers, on both sides
 const savedReachableServers = ref<string[]>([])
 const reachableServersChanged = computed(() => {
-  const ids = reachableServers.value.map((option) => option.id)
+  const ids = reachableServerIds.value
   return (
     ids.length != savedReachableServers.value.length ||
     ids.some((id) => !savedReachableServers.value.includes(id))
@@ -196,7 +203,7 @@ watch(
       reachableServerOptions.value = servers
         .filter((server) => server.id != tunnel?.id)
         .map((server) => ({ id: server.id, label: server.name, description: server.network }))
-      reachableServers.value = []
+      reachableServers.value = {}
       savedReachableServers.value = []
       validation.value.clear()
       if (tunnel != undefined) {
@@ -236,8 +243,11 @@ watch(
           supportsPeerTraffic.value = true
           clientToClient.value = tunnel.client_to_client
           savedReachableServers.value = [...(tunnel.reachable_servers ?? [])]
-          reachableServers.value = reachableServerOptions.value.filter((option) =>
-            savedReachableServers.value.includes(option.id)
+          reachableServers.value = Object.fromEntries(
+            reachableServerOptions.value.map((option) => [
+              option.id,
+              savedReachableServers.value.includes(option.id)
+            ])
           )
         }
         editing.value = true
@@ -327,7 +337,7 @@ function trafficParameters() {
   }
   return {
     client_to_client: clientToClient.value,
-    reachable_servers: reachableServers.value.map((option) => option.id)
+    reachable_servers: reachableServerIds.value
   }
 }
 
@@ -574,7 +584,9 @@ const saveButtonLabel = computed(() => {
         </template>
         <template v-if="supportsPeerTraffic">
           <div>
-            <NeFormItemLabel>{{ t('standalone.wireguard_tunnel.client_to_client') }}</NeFormItemLabel>
+            <NeFormItemLabel>{{
+              t('standalone.wireguard_tunnel.client_to_client')
+            }}</NeFormItemLabel>
             <NeToggle
               v-model="clientToClient"
               :disabled="disableForm"
@@ -584,23 +596,39 @@ const saveButtonLabel = computed(() => {
               {{ t('standalone.wireguard_tunnel.client_to_client_helper') }}
             </p>
           </div>
-          <NeCombobox
-            v-model="reachableServers"
-            multiple
-            optional
-            :disabled="disableForm"
-            :label="t('standalone.wireguard_tunnel.reachable_servers')"
-            :helper-text="t('standalone.wireguard_tunnel.reachable_servers_helper')"
-            :placeholder="t('standalone.wireguard_tunnel.choose_servers')"
-            :options="reachableServerOptions"
-            :invalid-message="t(validation.getFirstI18nKeyFor('reachable_servers'))"
-            :no-options-label="t('standalone.wireguard_tunnel.no_other_servers')"
-            :no-results-label="t('ne_combobox.no_results')"
-            :optional-label="t('common.optional')"
-            :selected-label="t('ne_combobox.selected')"
-            :limited-options-label="t('ne_combobox.limited_options_label')"
-            :user-input-label="t('ne_combobox.user_input_label')"
-          />
+          <div>
+            <NeFormItemLabel>{{
+              t('standalone.wireguard_tunnel.reachable_servers')
+            }}</NeFormItemLabel>
+            <!-- one row per server -->
+            <ul
+              v-if="reachableServerOptions.length > 0"
+              class="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+            >
+              <li v-for="option in reachableServerOptions" :key="option.id" class="px-4 py-3">
+                <NeCheckbox
+                  :id="`reachable-server-${option.id}`"
+                  v-model="reachableServers[option.id]"
+                  :disabled="disableForm"
+                  :label="option.label"
+                >
+                  <template #description>{{ option.description }}</template>
+                </NeCheckbox>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+              {{ t('standalone.wireguard_tunnel.no_other_servers') }}
+            </p>
+            <p
+              v-if="validation.getFirstI18nKeyFor('reachable_servers')"
+              class="mt-2 text-sm text-rose-700 dark:text-rose-400"
+            >
+              {{ t(validation.getFirstI18nKeyFor('reachable_servers')) }}
+            </p>
+            <p v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('standalone.wireguard_tunnel.reachable_servers_helper') }}
+            </p>
+          </div>
           <NeInlineNotification
             v-if="reachableServersChanged"
             kind="info"
